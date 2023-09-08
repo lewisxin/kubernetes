@@ -97,6 +97,7 @@ func (pl *DefaultPreemption) PostFilter(ctx context.Context, state *framework.Cy
 	}
 
 	result, status := pe.Preempt(ctx, pod, m)
+	klog.InfoS(">>>> lewis: PostFilter: preemption result", "result", result, "status", status)
 	if status.Message() != "" {
 		return result, framework.NewStatus(status.Code(), "preemption: "+status.Message())
 	}

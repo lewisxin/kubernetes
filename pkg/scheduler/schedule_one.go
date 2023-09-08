@@ -105,6 +105,7 @@ func (sched *Scheduler) scheduleOne(ctx context.Context) {
 	defer cancel()
 
 	scheduleResult, assumedPodInfo, status := sched.schedulingCycle(schedulingCycleCtx, state, fwk, podInfo, start, podsToActivate)
+	klog.InfoS(">>>> lewis: schedulingCycle result", "result", scheduleResult, "assumedPodInfo", assumedPodInfo, "status", status)
 	if !status.IsSuccess() {
 		sched.FailureHandler(schedulingCycleCtx, fwk, assumedPodInfo, status, scheduleResult.nominatingInfo, start)
 		return
@@ -144,6 +145,7 @@ func (sched *Scheduler) schedulingCycle(
 	pod := podInfo.Pod
 	scheduleResult, err := sched.SchedulePod(ctx, fwk, state, pod)
 	if err != nil {
+		klog.ErrorS(err, ">>>> lewis: schedulingCycle: SchedulePod failed", "pod", pod.Name)
 		if err == ErrNoNodesAvailable {
 			status := framework.NewStatus(framework.UnschedulableAndUnresolvable).WithError(err)
 			return ScheduleResult{nominatingInfo: clearNominatedNode}, podInfo, status
@@ -167,6 +169,7 @@ func (sched *Scheduler) schedulingCycle(
 
 		// Run PostFilter plugins to attempt to make the pod schedulable in a future scheduling cycle.
 		result, status := fwk.RunPostFilterPlugins(ctx, state, pod, fitError.Diagnosis.NodeToStatusMap)
+		klog.InfoS(">>>> lewis: schedulingCycle: post filter plugin result", "result", result, "status", status)
 		msg := status.Message()
 		fitError.Diagnosis.PostFilterMsg = msg
 		if status.Code() == framework.Error {
@@ -190,6 +193,7 @@ func (sched *Scheduler) schedulingCycle(
 	// assume modifies `assumedPod` by setting NodeName=scheduleResult.SuggestedHost
 	err = sched.assume(logger, assumedPod, scheduleResult.SuggestedHost)
 	if err != nil {
+		klog.ErrorS(err, ">>>> lewis: assume pod")
 		// This is most probably result of a BUG in retrying logic.
 		// We report an error here so that pod scheduling can be retried.
 		// This relies on the fact that Error will check if the pod has been bound
@@ -200,6 +204,8 @@ func (sched *Scheduler) schedulingCycle(
 
 	// Run the Reserve method of reserve plugins.
 	if sts := fwk.RunReservePluginsReserve(ctx, state, assumedPod, scheduleResult.SuggestedHost); !sts.IsSuccess() {
+		klog.InfoS(">>>> lewis: failed to run reserve plugin", "sts", sts)
+
 		// trigger un-reserve to clean up state associated with the reserved Pod
 		fwk.RunReservePluginsUnreserve(ctx, state, assumedPod, scheduleResult.SuggestedHost)
 		if forgetErr := sched.Cache.ForgetPod(logger, assumedPod); forgetErr != nil {
@@ -222,6 +228,8 @@ func (sched *Scheduler) schedulingCycle(
 
 	// Run "permit" plugins.
 	runPermitStatus := fwk.RunPermitPlugins(ctx, state, assumedPod, scheduleResult.SuggestedHost)
+	klog.InfoS(">>>> lewis: schedulingCycle: permit plugin result", "status", runPermitStatus)
+
 	if !runPermitStatus.IsWait() && !runPermitStatus.IsSuccess() {
 		// trigger un-reserve to clean up state associated with the reserved Pod
 		fwk.RunReservePluginsUnreserve(ctx, state, assumedPod, scheduleResult.SuggestedHost)
@@ -393,7 +401,9 @@ func (sched *Scheduler) schedulePod(ctx context.Context, fwk framework.Framework
 	}
 
 	feasibleNodes, diagnosis, err := sched.findNodesThatFitPod(ctx, fwk, state, pod)
+	klog.InfoS(">>>> lewis: schedulePod: findNodesThatFitPod", "feasibleNodes", feasibleNodes, "diagnosis", diagnosis)
 	if err != nil {
+		klog.ErrorS(err, ">>>> lewis: schedulePod: findNodesThatFitPod")
 		return result, err
 	}
 	trace.Step("Computing predicates done")
@@ -445,6 +455,7 @@ func (sched *Scheduler) findNodesThatFitPod(ctx context.Context, fwk framework.F
 	}
 	// Run "prefilter" plugins.
 	preRes, s := fwk.RunPreFilterPlugins(ctx, state, pod)
+	klog.InfoS(">>>> lewis: schedulingCycle: pre filter plugin result", "result", preRes, "status", s)
 	if !s.IsSuccess() {
 		if !s.IsUnschedulable() {
 			return nil, diagnosis, s.AsError()

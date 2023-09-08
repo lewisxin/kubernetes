@@ -346,6 +346,7 @@ func (ev *Evaluator) SelectCandidate(logger klog.Logger, candidates []Candidate)
 // - Reject the victim pods if they are in waitingPod map
 // - Clear the low-priority pods' nominatedNodeName status if needed
 func (ev *Evaluator) prepareCandidate(ctx context.Context, c Candidate, pod *v1.Pod, pluginName string) *framework.Status {
+	klog.InfoS(">>>> lewis: prepareCandidate")
 	fh := ev.Handler
 	cs := ev.Handler.ClientSet()
 
@@ -377,6 +378,7 @@ func (ev *Evaluator) prepareCandidate(ctx context.Context, c Candidate, pod *v1.
 					return
 				}
 			}
+			klog.InfoS(">>>> lewis: Preemptor Pod preempting victim Pod", "preemptor", klog.KObj(pod), "victim", klog.KObj(victim), "node", c.Name())
 			if err := util.DeletePod(ctx, cs, victim); err != nil {
 				logger.Error(err, "Preempted pod", "pod", klog.KObj(victim), "preemptor", klog.KObj(pod))
 				errCh.SendErrorWithCancel(err, cancel)

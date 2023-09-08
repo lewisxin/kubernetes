@@ -198,6 +198,9 @@ type PodWorkers interface {
 	// use ShouldPod*().
 	IsPodTerminationRequested(uid types.UID) bool
 
+	// IsPodPaused returns true when pod is currently paused due to preemption
+	IsPodPaused(uid types.UID) bool
+
 	// ShouldPodContainersBeTerminating returns false before pod workers have synced,
 	// or once a pod has started terminating. This check is similar to
 	// ShouldPodRuntimeBeRemoved but is also true after pod termination is requested.
@@ -361,6 +364,7 @@ type podSyncStatus struct {
 	// terminatedAt is set once the pod worker has completed a successful
 	// syncTerminatingPod call and means all running containers are stopped.
 	terminatedAt time.Time
+	paused       bool
 	// gracePeriod is the requested gracePeriod once terminatingAt is nonzero.
 	gracePeriod int64
 	// notifyPostTerminating will be closed once the pod transitions to
@@ -406,6 +410,7 @@ func (s *podSyncStatus) IsWorking() bool              { return s.working }
 func (s *podSyncStatus) IsTerminationRequested() bool { return !s.terminatingAt.IsZero() }
 func (s *podSyncStatus) IsTerminationStarted() bool   { return s.startedTerminating }
 func (s *podSyncStatus) IsTerminated() bool           { return !s.terminatedAt.IsZero() }
+func (s *podSyncStatus) IsPaused() bool               { return s.paused }
 func (s *podSyncStatus) IsFinished() bool             { return s.finished }
 func (s *podSyncStatus) IsEvicted() bool              { return s.evicted }
 func (s *podSyncStatus) IsDeleted() bool              { return s.deleted }
@@ -662,6 +667,19 @@ func (p *podWorkers) IsPodTerminationRequested(uid types.UID) bool {
 	return false
 }
 
+func (p *podWorkers) IsPodPaused(uid types.UID) bool {
+	p.podLock.Lock()
+	defer p.podLock.Unlock()
+
+	if status, ok := p.podSyncStatuses[uid]; ok {
+		// the pod may still be setting up at this point.
+		return status.IsPaused()
+	}
+	// an unknown pod is considered not to be terminating (use ShouldPodContainersBeTerminating in
+	// cleanup loops to avoid failing to cleanup pods that have already been removed from config)
+	return false
+}
+
 func (p *podWorkers) ShouldPodContainersBeTerminating(uid types.UID) bool {
 	p.podLock.Lock()
 	defer p.podLock.Unlock()
@@ -822,6 +840,17 @@ func (p *podWorkers) UpdatePod(options UpdatePodOptions) {
 			// options.Pod will be nil and other methods must handle that appropriately.
 			pod = options.RunningPod.ToAPIPod()
 		}
+	}
+
+	// TODO: simplified pausing container logic for testing
+	// this should be moved to pod worker instead
+	pause, ok := options.Pod.Annotations["simpleddl.scheduling.x-k8s.io/pause"]
+	if ok && pause == "true" {
+		klog.InfoS(">>>> lewis: UpdatePod: pod marked to be paused, setting paused to simulate pause")
+		status.paused = true
+	} else {
+		klog.InfoS(">>>> lewis: UpdatePod: pod marked to be unpaused, unsetting paused to simulate unpause")
+		status.paused = false
 	}
 
 	// When we see a create update on an already terminating pod, that implies two pods with the same UID were created in

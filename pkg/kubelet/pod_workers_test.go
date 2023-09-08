@@ -56,6 +56,7 @@ type fakePodWorkers struct {
 	terminating           map[types.UID]bool
 	terminated            map[types.UID]bool
 	terminationRequested  map[types.UID]bool
+	paused                map[types.UID]bool
 	finished              map[types.UID]bool
 	removeRuntime         map[types.UID]bool
 	removeContent         map[types.UID]bool
@@ -115,6 +116,11 @@ func (f *fakePodWorkers) IsPodTerminationRequested(uid types.UID) bool {
 	f.statusLock.Lock()
 	defer f.statusLock.Unlock()
 	return f.terminationRequested[uid]
+}
+func (f *fakePodWorkers) IsPodPaused(uid types.UID) bool {
+	f.statusLock.Lock()
+	defer f.statusLock.Unlock()
+	return f.paused[uid]
 }
 func (f *fakePodWorkers) ShouldPodContainersBeTerminating(uid types.UID) bool {
 	f.statusLock.Lock()

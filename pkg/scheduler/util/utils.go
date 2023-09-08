@@ -136,7 +136,23 @@ func PatchPodStatus(ctx context.Context, cs kubernetes.Interface, old *v1.Pod, n
 
 // DeletePod deletes the given <pod> from API server
 func DeletePod(ctx context.Context, cs kubernetes.Interface, pod *v1.Pod) error {
-	return cs.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{})
+	pod, err := cs.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
+	if err != nil {
+		klog.ErrorS(err, ">>>> lewis: DeletePod: get lastest pod info")
+		return err
+	}
+	klog.InfoS(">>>> lewis: DeletePod: adding annotation: simpleddl.scheduling.x-k8s.io/pause=true", "pod", klog.KObj(pod))
+	updatedPod := pod.DeepCopy()
+	annot := updatedPod.GetAnnotations()
+	if annot == nil {
+		klog.Warning(">>>> lewis: DeletePod: annotation map is nil, creating a new map")
+		annot = make(map[string]string)
+	}
+	annot["simpleddl.scheduling.x-k8s.io/pause"] = "true"
+	updatedPod.SetAnnotations(annot)
+	klog.InfoS(">>>> lewis: DeletePod: successfully updated annotation", "annotations", annot)
+	_, err = cs.CoreV1().Pods((pod.Namespace)).Update(ctx, updatedPod, metav1.UpdateOptions{})
+	return err
 }
 
 // ClearNominatedNodeName internally submit a patch request to API server

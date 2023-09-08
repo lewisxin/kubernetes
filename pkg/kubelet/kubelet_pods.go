@@ -963,6 +963,11 @@ func (kl *Kubelet) filterOutInactivePods(pods []*v1.Pod) []*v1.Pod {
 			continue
 		}
 
+		// paused pods are considered inactive
+		if kl.podWorkers.IsPodPaused(p.UID) {
+			continue
+		}
+
 		filteredPods = append(filteredPods, p)
 	}
 	return filteredPods

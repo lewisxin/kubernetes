@@ -817,6 +817,7 @@ func (m *kubeGenericRuntimeManager) updatePodContainerResources(pod *v1.Pod, res
 
 // computePodActions checks whether the pod spec has changed and returns the changes if true.
 func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *v1.Pod, podStatus *kubecontainer.PodStatus) podActions {
+	klog.InfoS(">>>>> lewis: Syncing pod", "pod", klog.KObj(pod))
 	klog.V(5).InfoS("Syncing Pod", "pod", klog.KObj(pod))
 
 	createPodSandbox, attempt, sandboxID := runtimeutil.PodSandboxChanged(pod, podStatus)
@@ -910,6 +911,7 @@ func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *
 		// allocated cpus are released immediately. If the container is restarted, cpus will be re-allocated
 		// to it.
 		if containerStatus != nil && containerStatus.State != kubecontainer.ContainerStateRunning {
+			klog.InfoS(">>>>> lewis: check status of containers", "pod", klog.KObj(pod))
 			if err := m.internalLifecycle.PostStopContainer(containerStatus.ID.ID); err != nil {
 				klog.ErrorS(err, "Internal container post-stop lifecycle hook failed for container in pod with error",
 					"containerName", container.Name, "pod", klog.KObj(pod))

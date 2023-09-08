@@ -74,6 +74,7 @@ func (w *predicateAdmitHandler) Admit(attrs *PodAdmitAttributes) PodAdmitResult 
 	pods := attrs.OtherPods
 	nodeInfo := schedulerframework.NewNodeInfo(pods...)
 	nodeInfo.SetNode(node)
+	klog.InfoS(">>>> lewis: Admit check", "nodeInfo.Allocatable", nodeInfo.Allocatable, "node", node.Name)
 
 	// TODO: Remove this after the SidecarContainers feature gate graduates to GA.
 	if !utilfeature.DefaultFeatureGate.Enabled(features.SidecarContainers) {
@@ -277,6 +278,8 @@ func (e *PredicateFailureError) GetReason() string {
 
 // generalFilter checks a group of filterings that the kubelet cares about.
 func generalFilter(pod *v1.Pod, nodeInfo *schedulerframework.NodeInfo) []PredicateFailureReason {
+	klog.InfoS(">>>> lewis: generalFilter", "pod", klog.KObj(pod), "node", klog.KObj(nodeInfo.Node()))
+
 	admissionResults := scheduler.AdmissionCheck(pod, nodeInfo, true)
 	var reasons []PredicateFailureReason
 	for _, r := range admissionResults {

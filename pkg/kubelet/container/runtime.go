@@ -95,6 +95,9 @@ type Runtime interface {
 	// will be GC'd.
 	// TODO: Revisit this method and make it cleaner.
 	GarbageCollect(ctx context.Context, gcPolicy GCPolicy, allSourcesReady bool, evictNonDeletedPods bool) error
+
+	// Lewis(2023-09-02 02:24)
+	// Need to find out the implementation of SyncPod and see if we can add a status preempted to pause and resume the container
 	// SyncPod syncs the running pod into the desired pod.
 	SyncPod(ctx context.Context, pod *v1.Pod, podStatus *PodStatus, pullSecrets []v1.Secret, backOff *flowcontrol.Backoff) PodSyncResult
 	// KillPod kills all the containers of a pod. Pod may be nil, running pod must not be.
@@ -262,6 +265,7 @@ const (
 	ContainerStateCreated State = "created"
 	// ContainerStateRunning indicates a currently running container.
 	ContainerStateRunning State = "running"
+	ContainerStatePaused  State = "paused"
 	// ContainerStateExited indicates a container that ran and completed ("stopped" in other contexts, although a created container is technically also "stopped").
 	ContainerStateExited State = "exited"
 	// ContainerStateUnknown encompasses all the states that we currently don't care about (like restarting, paused, dead).

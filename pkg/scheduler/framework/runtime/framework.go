@@ -841,6 +841,7 @@ func (f *frameworkImpl) RunPostFilterPlugins(ctx context.Context, state *framewo
 		logger := klog.LoggerWithName(logger, pl.Name())
 		ctx := klog.NewContext(ctx, logger)
 		r, s := f.runPostFilterPlugin(ctx, pl, state, pod, filteredNodeStatusMap)
+		klog.InfoS(">>>> lewis: RunPostFilterPlugins: runPostFilterPlugin", "result", r, "status", s)
 		if s.IsSuccess() {
 			return r, s
 		} else if s.Code() == framework.UnschedulableAndUnresolvable {
@@ -1270,6 +1271,7 @@ func (f *frameworkImpl) RunReservePluginsReserve(ctx context.Context, state *fra
 		logger := klog.LoggerWithName(logger, pl.Name())
 		ctx := klog.NewContext(ctx, logger)
 		status = f.runReservePluginReserve(ctx, pl, state, pod, nodeName)
+		klog.InfoS(">>>> lewis: run reserve plugin", "status", status, "plugin", pl.Name())
 		if !status.IsSuccess() {
 			if status.IsUnschedulable() {
 				logger.V(4).Info("Pod rejected by plugin", "pod", klog.KObj(pod), "plugin", pl.Name(), "status", status.Message())
@@ -1349,6 +1351,7 @@ func (f *frameworkImpl) RunPermitPlugins(ctx context.Context, state *framework.C
 		logger := klog.LoggerWithName(logger, pl.Name())
 		ctx := klog.NewContext(ctx, logger)
 		status, timeout := f.runPermitPlugin(ctx, pl, state, pod, nodeName)
+		klog.InfoS(">>>> lewis: RunPermitPlugins: permit plugin result", "status", status)
 		if !status.IsSuccess() {
 			if status.IsUnschedulable() {
 				logger.V(4).Info("Pod rejected by plugin", "pod", klog.KObj(pod), "plugin", pl.Name(), "status", status.Message())
