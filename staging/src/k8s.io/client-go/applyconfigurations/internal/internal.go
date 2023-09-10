@@ -4701,6 +4701,9 @@ var schemaYAML = typed.YAMLObject(`types:
 - name: io.k8s.api.core.v1.ContainerState
   map:
     fields:
+    - name: paused
+      type:
+        namedType: io.k8s.api.core.v1.ContainerStatePaused
     - name: running
       type:
         namedType: io.k8s.api.core.v1.ContainerStateRunning
@@ -4710,6 +4713,13 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: waiting
       type:
         namedType: io.k8s.api.core.v1.ContainerStateWaiting
+- name: io.k8s.api.core.v1.ContainerStatePaused
+  map:
+    fields:
+    - name: pausedAt
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Time
+      default: {}
 - name: io.k8s.api.core.v1.ContainerStateRunning
   map:
     fields:

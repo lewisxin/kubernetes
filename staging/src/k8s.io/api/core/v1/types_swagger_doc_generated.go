@@ -405,10 +405,19 @@ var map_ContainerState = map[string]string{
 	"waiting":    "Details about a waiting container",
 	"running":    "Details about a running container",
 	"terminated": "Details about a terminated container",
+	"paused":     "Details about a paused container",
 }
 
 func (ContainerState) SwaggerDoc() map[string]string {
 	return map_ContainerState
+}
+
+var map_ContainerStatePaused = map[string]string{
+	"pausedAt": "Time at which the container was last paused",
+}
+
+func (ContainerStatePaused) SwaggerDoc() map[string]string {
+	return map_ContainerStatePaused
 }
 
 var map_ContainerStateRunning = map[string]string{

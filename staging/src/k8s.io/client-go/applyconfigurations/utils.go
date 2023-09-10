@@ -635,6 +635,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &applyconfigurationscorev1.ContainerResizePolicyApplyConfiguration{}
 	case corev1.SchemeGroupVersion.WithKind("ContainerState"):
 		return &applyconfigurationscorev1.ContainerStateApplyConfiguration{}
+	case corev1.SchemeGroupVersion.WithKind("ContainerStatePaused"):
+		return &applyconfigurationscorev1.ContainerStatePausedApplyConfiguration{}
 	case corev1.SchemeGroupVersion.WithKind("ContainerStateRunning"):
 		return &applyconfigurationscorev1.ContainerStateRunningApplyConfiguration{}
 	case corev1.SchemeGroupVersion.WithKind("ContainerStateTerminated"):

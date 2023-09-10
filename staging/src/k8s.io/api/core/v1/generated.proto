@@ -908,6 +908,16 @@ message ContainerState {
   // Details about a terminated container
   // +optional
   optional ContainerStateTerminated terminated = 3;
+
+  // Details about a paused container
+  // +optional
+  optional ContainerStatePaused paused = 4;
+}
+
+message ContainerStatePaused {
+  // Time at which the container was last paused
+  // +optional
+  optional k8s.io.apimachinery.pkg.apis.meta.v1.Time pausedAt = 1;
 }
 
 // ContainerStateRunning is a running state of a container.
