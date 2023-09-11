@@ -24,6 +24,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -1013,5 +1014,52 @@ func TestIsContainersReadyConditionTrue(t *testing.T) {
 	for _, test := range tests {
 		isContainersReady := IsContainersReadyConditionTrue(test.podStatus)
 		assert.Equal(t, test.expected, isContainersReady, test.desc)
+	}
+}
+
+func TestShouldPausePod(t *testing.T) {
+	for desc, test := range map[string]struct {
+		input          *v1.Pod
+		shouldBePaused bool
+	}{
+		"unrecognized key - should return false": {
+			input: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "pod1",
+					Annotations: map[string]string{"random-key": "true"},
+				},
+			},
+			shouldBePaused: false,
+		},
+		"empty annotations - should return false": {
+			input: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "pod2",
+				},
+			},
+			shouldBePaused: false,
+		},
+		"marked as false - should return false": {
+			input: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "pod3",
+					Annotations: map[string]string{AnnotationKeyPausePod: "false"},
+				},
+			},
+			shouldBePaused: false,
+		},
+		"marked as true - should return false": {
+			input: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "pod4",
+					Annotations: map[string]string{AnnotationKeyPausePod: "true"},
+				},
+			},
+			shouldBePaused: true,
+		},
+	} {
+		t.Run(desc, func(t *testing.T) {
+			require.Equal(t, test.shouldBePaused, ShouldPausePod((test.input)))
+		})
 	}
 }

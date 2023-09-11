@@ -963,6 +963,11 @@ func (kl *Kubelet) filterOutInactivePods(pods []*v1.Pod) []*v1.Pod {
 			continue
 		}
 
+		// paused pod does not consume computing resources thus are considered inactive
+		if kl.podWorkers.IsPodPaused(p.UID) {
+			continue
+		}
+
 		filteredPods = append(filteredPods, p)
 	}
 	return filteredPods
@@ -1502,6 +1507,7 @@ func getPhase(pod *v1.Pod, info []v1.ContainerStatus, podIsTerminal bool) v1.Pod
 	// counters for restartable init and regular containers
 	unknown := 0
 	running := 0
+	paused := 0
 	waiting := 0
 	stopped := 0
 	succeeded := 0
@@ -1551,6 +1557,8 @@ func getPhase(pod *v1.Pod, info []v1.ContainerStatus, podIsTerminal bool) v1.Pod
 		switch {
 		case containerStatus.State.Running != nil:
 			running++
+		case containerStatus.State.Paused != nil:
+			paused++
 		case containerStatus.State.Terminated != nil:
 			stopped++
 			if containerStatus.State.Terminated.ExitCode == 0 {
@@ -1582,6 +1590,9 @@ func getPhase(pod *v1.Pod, info []v1.ContainerStatus, podIsTerminal bool) v1.Pod
 		klog.V(5).InfoS("Pod waiting > 0, pending")
 		// One or more containers has not been started
 		return v1.PodPending
+	case paused > 0 && running == 0 && unknown == 0:
+		// All containers have been started, and all are paused
+		return v1.PodPaused
 	case running > 0 && unknown == 0:
 		// All containers have been started, and at least
 		// one container is running

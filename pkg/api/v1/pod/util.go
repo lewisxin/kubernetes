@@ -395,3 +395,15 @@ func UpdatePodCondition(status *v1.PodStatus, condition *v1.PodCondition) bool {
 	// Return true if one of the fields have changed.
 	return !isEqual
 }
+
+const (
+	AnnotationKeyPausePod = "rt-preemptive.scheduling.x-k8s.io/pause-pod"
+)
+
+func ShouldPausePod(pod *v1.Pod) bool {
+	pause, ok := pod.Annotations[AnnotationKeyPausePod]
+	if !ok {
+		return false
+	}
+	return pause == "true"
+}

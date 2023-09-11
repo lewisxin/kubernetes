@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 	"k8s.io/klog/v2"
+	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/events"
 	"k8s.io/kubernetes/pkg/kubelet/eviction"
@@ -238,6 +239,8 @@ type PodWorkers interface {
 	// deleting a terminating static pod from the apiserver before the pod is shut
 	// down.
 	IsPodForMirrorPodTerminatingByFullName(podFullname string) bool
+	// IsPodPaused returns true if a pod's container processes are temporarily frozen
+	IsPodPaused(uid types.UID) bool
 }
 
 // podSyncer describes the core lifecyle operations of the pod state machine. A pod is first
@@ -361,6 +364,8 @@ type podSyncStatus struct {
 	// terminatedAt is set once the pod worker has completed a successful
 	// syncTerminatingPod call and means all running containers are stopped.
 	terminatedAt time.Time
+	// pausedAt is set once the pod worker is paused.
+	pausedAt time.Time
 	// gracePeriod is the requested gracePeriod once terminatingAt is nonzero.
 	gracePeriod int64
 	// notifyPostTerminating will be closed once the pod transitions to
@@ -378,6 +383,8 @@ type podSyncStatus struct {
 	// TerminatingPod). Once this is set, it is safe for other components
 	// of the kubelet to assume that no other containers may be started.
 	startedTerminating bool
+	// paused is true if the pod has been marked as paused
+	paused bool
 	// deleted is true if the pod has been marked for deletion on the apiserver
 	// or has no configuration represented (was deleted before).
 	deleted bool
@@ -406,6 +413,7 @@ func (s *podSyncStatus) IsWorking() bool              { return s.working }
 func (s *podSyncStatus) IsTerminationRequested() bool { return !s.terminatingAt.IsZero() }
 func (s *podSyncStatus) IsTerminationStarted() bool   { return s.startedTerminating }
 func (s *podSyncStatus) IsTerminated() bool           { return !s.terminatedAt.IsZero() }
+func (s *podSyncStatus) IsPaused() bool               { return s.paused }
 func (s *podSyncStatus) IsFinished() bool             { return s.finished }
 func (s *podSyncStatus) IsEvicted() bool              { return s.evicted }
 func (s *podSyncStatus) IsDeleted() bool              { return s.deleted }
@@ -650,6 +658,15 @@ func (p *podWorkers) ShouldPodBeFinished(uid types.UID) bool {
 	return p.podsSynced
 }
 
+func (p *podWorkers) IsPodPaused(uid types.UID) bool {
+	p.podLock.Lock()
+	defer p.podLock.Unlock()
+	if status, ok := p.podSyncStatuses[uid]; ok {
+		return status.IsPaused()
+	}
+	return p.podsSynced
+}
+
 func (p *podWorkers) IsPodTerminationRequested(uid types.UID) bool {
 	p.podLock.Lock()
 	defer p.podLock.Unlock()
@@ -717,10 +734,14 @@ func (p *podWorkers) IsPodForMirrorPodTerminatingByFullName(podFullName string) 
 
 func isPodStatusCacheTerminal(status *kubecontainer.PodStatus) bool {
 	runningContainers := 0
+	pausedContainers := 0
 	runningSandboxes := 0
 	for _, container := range status.ContainerStatuses {
 		if container.State == kubecontainer.ContainerStateRunning {
 			runningContainers++
+		}
+		if container.State == kubecontainer.ContainerStatePaused {
+			pausedContainers++
 		}
 	}
 	for _, sb := range status.SandboxStatuses {
@@ -728,11 +749,11 @@ func isPodStatusCacheTerminal(status *kubecontainer.PodStatus) bool {
 			runningSandboxes++
 		}
 	}
-	return runningContainers == 0 && runningSandboxes == 0
+	return runningContainers == 0 && runningSandboxes == 0 && pausedContainers == 0
 }
 
 // UpdatePod carries a configuration change or termination state to a pod. A pod is either runnable,
-// terminating, or terminated, and will transition to terminating if: deleted on the apiserver,
+// paused, terminating, or terminated, and will transition to terminating if: deleted on the apiserver,
 // discovered to have a terminal phase (Succeeded or Failed), or evicted by the kubelet.
 func (p *podWorkers) UpdatePod(options UpdatePodOptions) {
 	// Handle when the pod is an orphan (no config) and we only have runtime status by running only
@@ -859,6 +880,11 @@ func (p *podWorkers) UpdatePod(options UpdatePodOptions) {
 			becameTerminating = true
 		case pod.Status.Phase == v1.PodFailed, pod.Status.Phase == v1.PodSucceeded:
 			klog.V(4).InfoS("Pod is in a terminal phase (success/failed), begin teardown", "pod", klog.KRef(ns, name), "podUID", uid, "updateType", options.UpdateType)
+			status.terminatingAt = now
+			becameTerminating = true
+		case pod.Status.Phase == v1.PodPaused:
+			// TODO: fix log verbose level
+			klog.InfoS(">>>> (feat/pause-pod) Pod is currently paused, begin teardown", "pod", klog.KRef(ns, name), "podUID", uid, "updateType", options.UpdateType)
 			status.terminatingAt = now
 			becameTerminating = true
 		case options.UpdateType == kubetypes.SyncPodKill:
@@ -1289,6 +1315,7 @@ func (p *podWorkers) podWorkerLoop(podUID types.UID, podUpdates <-chan struct{})
 			return err
 		}()
 
+		pausePod := podutil.ShouldPausePod(update.Options.Pod)
 		var phaseTransition bool
 		switch {
 		case err == context.Canceled:
@@ -1298,6 +1325,12 @@ func (p *podWorkers) podWorkerLoop(podUID types.UID, podUpdates <-chan struct{})
 		case err != nil:
 			// we will queue a retry
 			klog.ErrorS(err, "Error syncing pod, skipping", "pod", podRef, "podUID", podUID)
+
+		case pausePod:
+			// TODO: fix log verbose level
+			klog.InfoS(">>>> (feat/pause-pod): Sync pod is done successfully, paused pod", "pod", podRef, "podUID", podUID, "updateType", update.WorkType)
+			p.completePaused(podUID)
+			phaseTransition = true
 
 		case update.WorkType == TerminatedPod:
 			// we can shut down the worker
@@ -1419,6 +1452,22 @@ func (p *podWorkers) completeTerminating(podUID types.UID) {
 	// the pod has now transitioned to terminated and we want to run syncTerminatedPod
 	// as soon as possible, so if no update is already waiting queue a synthetic update
 	p.requeueLastPodUpdate(podUID, status)
+}
+
+func (p *podWorkers) completePaused(podUID types.UID) {
+	p.podLock.Lock()
+	defer p.podLock.Unlock()
+
+	// TODO: fix log verbose level
+	klog.InfoS(">>>> (feat/pause-pod): Pod is paused", "podUID", podUID)
+
+	status, ok := p.podSyncStatuses[podUID]
+	if !ok {
+		return
+	}
+
+	status.pausedAt = p.clock.Now()
+	status.paused = true
 }
 
 // completeTerminatingRuntimePod is invoked when syncTerminatingPod completes successfully,
