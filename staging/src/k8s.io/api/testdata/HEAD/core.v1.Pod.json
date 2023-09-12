@@ -1673,6 +1673,9 @@
             "startedAt": "2005-01-01T01:01:01Z",
             "finishedAt": "2006-01-01T01:01:01Z",
             "containerID": "containerIDValue"
+          },
+          "paused": {
+            "pausedAt": "2001-01-01T01:01:01Z"
           }
         },
         "lastState": {
@@ -1691,6 +1694,9 @@
             "startedAt": "2005-01-01T01:01:01Z",
             "finishedAt": "2006-01-01T01:01:01Z",
             "containerID": "containerIDValue"
+          },
+          "paused": {
+            "pausedAt": "2001-01-01T01:01:01Z"
           }
         },
         "ready": true,
@@ -1736,6 +1742,9 @@
             "startedAt": "2005-01-01T01:01:01Z",
             "finishedAt": "2006-01-01T01:01:01Z",
             "containerID": "containerIDValue"
+          },
+          "paused": {
+            "pausedAt": "2001-01-01T01:01:01Z"
           }
         },
         "lastState": {
@@ -1754,6 +1763,9 @@
             "startedAt": "2005-01-01T01:01:01Z",
             "finishedAt": "2006-01-01T01:01:01Z",
             "containerID": "containerIDValue"
+          },
+          "paused": {
+            "pausedAt": "2001-01-01T01:01:01Z"
           }
         },
         "ready": true,
@@ -1800,6 +1812,9 @@
             "startedAt": "2005-01-01T01:01:01Z",
             "finishedAt": "2006-01-01T01:01:01Z",
             "containerID": "containerIDValue"
+          },
+          "paused": {
+            "pausedAt": "2001-01-01T01:01:01Z"
           }
         },
         "lastState": {
@@ -1818,6 +1833,9 @@
             "startedAt": "2005-01-01T01:01:01Z",
             "finishedAt": "2006-01-01T01:01:01Z",
             "containerID": "containerIDValue"
+          },
+          "paused": {
+            "pausedAt": "2001-01-01T01:01:01Z"
           }
         },
         "ready": true,
