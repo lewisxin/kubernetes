@@ -1045,17 +1045,38 @@ func (m *kubeGenericRuntimeManager) SyncPod(ctx context.Context, pod *v1.Pod, po
 
 	// TODO: protect with feature gate
 	if podContainerChanges.PausePod {
-		// TODO: change verbose level to 3
+		// TODO: remove debug log
 		klog.InfoS(">>>> (feat/pause-pod): Pausing containers for pod")
 		for _, idx := range podContainerChanges.ContainersToPause {
-			klog.InfoS(">>>> (feat/pause-pod): Pausing containers", "container", pod.Spec.Containers[idx].Name)
+			container := pod.Spec.Containers[idx]
+			containerStatus := podStatus.FindContainerStatusByName(container.Name)
+			containerID := containerStatus.ID.ID
+			// TODO: remove debug log
+			klog.InfoS(">>>> (feat/pause-pod): Pausing containers", "container", container.Name, "containerID", containerID)
+			msg, err := m.pauseContainer(ctx, pod, &container, containerID)
+			if err != nil {
+				klog.ErrorS(err, "pauseContainer failed", "message", msg)
+			} else {
+				pauseContainerResult := kubecontainer.NewSyncResult(kubecontainer.PauseContainer, container.Name)
+				result.AddSyncResult(pauseContainerResult)
+			}
 		}
-
 	} else if len(podContainerChanges.ContainersToResume) > 0 {
-		// TODO: change verbose level to 3
+		// TODO: remove debug log
 		klog.InfoS(">>>> (feat/pause-pod): Resuming containers for paused pod: to be implemented")
-		for _, idx := range podContainerChanges.ContainersToPause {
-			klog.InfoS(">>>> (feat/pause-pod): Resuming containers", "container", pod.Spec.Containers[idx].Name)
+		for _, idx := range podContainerChanges.ContainersToResume {
+			container := pod.Spec.Containers[idx]
+			containerStatus := podStatus.FindContainerStatusByName(container.Name)
+			containerID := containerStatus.ID.ID
+			// TODO: remove debug log
+			klog.InfoS(">>>> (feat/pause-pod): Resuming containers", "container", container.Name, "containerID", containerID)
+			msg, err := m.resumeContainer(ctx, pod, &container, containerID)
+			if err != nil {
+				klog.ErrorS(err, "resumeContainer failed", "message", msg)
+			} else {
+				resumeContainerResult := kubecontainer.NewSyncResult(kubecontainer.ResumeContainer, container.Name)
+				result.AddSyncResult(resumeContainerResult)
+			}
 		}
 	}
 

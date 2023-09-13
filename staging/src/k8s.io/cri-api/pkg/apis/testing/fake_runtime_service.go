@@ -413,6 +413,50 @@ func (r *FakeRuntimeService) StartContainer(_ context.Context, containerID strin
 	return nil
 }
 
+// PauseContainer emulates pause of a container in the FakeRuntimeService.
+func (r *FakeRuntimeService) PauseContainer(_ context.Context, containerID string) error {
+	r.Lock()
+	defer r.Unlock()
+
+	r.Called = append(r.Called, "PauseContainer")
+	if err := r.popError("PauseContainer"); err != nil {
+		return err
+	}
+
+	c, ok := r.Containers[containerID]
+	if !ok {
+		return fmt.Errorf("container %s not found", containerID)
+	}
+
+	// Set container to running.
+	c.State = runtimeapi.ContainerState_CONTAINER_PAUSED
+	c.PausedAt = time.Now().UnixNano()
+
+	return nil
+}
+
+// ResumeContainer emulates resume of a container in the FakeRuntimeService.
+func (r *FakeRuntimeService) ResumeContainer(_ context.Context, containerID string) error {
+	r.Lock()
+	defer r.Unlock()
+
+	r.Called = append(r.Called, "ResumeContainer")
+	if err := r.popError("ResumeContainer"); err != nil {
+		return err
+	}
+
+	c, ok := r.Containers[containerID]
+	if !ok {
+		return fmt.Errorf("container %s not found", containerID)
+	}
+
+	// Set container to running.
+	c.State = runtimeapi.ContainerState_CONTAINER_RUNNING
+	c.StartedAt = time.Now().UnixNano()
+
+	return nil
+}
+
 // StopContainer emulates stop of a container in the FakeRuntimeService.
 func (r *FakeRuntimeService) StopContainer(_ context.Context, containerID string, timeout int64) error {
 	r.Lock()

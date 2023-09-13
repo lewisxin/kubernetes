@@ -168,6 +168,28 @@ func calcRestartCountByLogDir(path string) (int, error) {
 	return restartCount, nil
 }
 
+func (m *kubeGenericRuntimeManager) pauseContainer(ctx context.Context, pod *v1.Pod, container *v1.Container, containerID string) (string, error) {
+	err := m.runtimeService.PauseContainer(ctx, containerID)
+	if err != nil {
+		s, _ := grpcstatus.FromError(err)
+		m.recordContainerEvent(pod, container, containerID, v1.EventTypeWarning, events.FailedToPauseContainer, "Error: %v", s.Message())
+		return s.Message(), kubecontainer.ErrPauseContainer
+	}
+	m.recordContainerEvent(pod, container, containerID, v1.EventTypeNormal, events.PausedContainer, fmt.Sprintf("Paused container %s", container.Name))
+	return "", nil
+}
+
+func (m *kubeGenericRuntimeManager) resumeContainer(ctx context.Context, pod *v1.Pod, container *v1.Container, containerID string) (string, error) {
+	err := m.runtimeService.ResumeContainer(ctx, containerID)
+	if err != nil {
+		s, _ := grpcstatus.FromError(err)
+		m.recordContainerEvent(pod, container, containerID, v1.EventTypeWarning, events.FailedToResumeContainer, "Error: %v", s.Message())
+		return s.Message(), kubecontainer.ErrResumeContainer
+	}
+	m.recordContainerEvent(pod, container, containerID, v1.EventTypeNormal, events.ResumedContainer, fmt.Sprintf("Resumed container %s", container.Name))
+	return "", nil
+}
+
 // startContainer starts a container and returns a message indicates why it is failed on error.
 // It starts the container through the following steps:
 // * pull the image

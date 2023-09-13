@@ -348,6 +348,44 @@ func (r *remoteRuntimeService) StartContainer(ctx context.Context, containerID s
 	return nil
 }
 
+// PauseContainer pauses the container.
+func (r *remoteRuntimeService) PauseContainer(ctx context.Context, containerID string) (err error) {
+	// TODO: add log verbose level to 10
+	klog.InfoS("[RemoteRuntimeService] PauseContainer", "containerID", containerID, "timeout", r.timeout)
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+
+	if _, err := r.runtimeClient.PauseContainer(ctx, &runtimeapi.PauseContainerRequest{
+		ContainerId: containerID,
+	}); err != nil {
+		klog.ErrorS(err, "PauseContainer from runtime service failed", "containerID", containerID)
+		return err
+	}
+	// TODO: add log verbose level to 10
+	klog.InfoS("[RemoteRuntimeService] PauseContainer Response", "containerID", containerID)
+
+	return nil
+}
+
+// ResumeContainer resumes the container.
+func (r *remoteRuntimeService) ResumeContainer(ctx context.Context, containerID string) (err error) {
+	// TODO: add log verbose level to 10
+	klog.InfoS("[RemoteRuntimeService] ResumeContainer", "containerID", containerID, "timeout", r.timeout)
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+
+	if _, err := r.runtimeClient.ResumeContainer(ctx, &runtimeapi.ResumeContainerRequest{
+		ContainerId: containerID,
+	}); err != nil {
+		klog.ErrorS(err, "ResumeContainer from runtime service failed", "containerID", containerID)
+		return err
+	}
+	// TODO: add log verbose level to 10
+	klog.InfoS("[RemoteRuntimeService] ResumeContainer Response", "containerID", containerID)
+
+	return nil
+}
+
 // StopContainer stops a running container with a grace period (i.e., timeout).
 func (r *remoteRuntimeService) StopContainer(ctx context.Context, containerID string, timeout int64) (err error) {
 	klog.V(10).InfoS("[RemoteRuntimeService] StopContainer", "containerID", containerID, "timeout", timeout)
