@@ -1255,7 +1255,8 @@ func (p *podWorkers) podWorkerLoop(podUID types.UID, podUpdates <-chan struct{})
 
 		podUID, podRef := podUIDAndRefForUpdate(update.Options)
 
-		klog.V(4).InfoS("Processing pod event", "pod", podRef, "podUID", podUID, "updateType", update.WorkType)
+		// TODO: set back to log level 4
+		klog.InfoS("Processing pod event", "pod", podRef, "podUID", podUID, "updateType", update.WorkType)
 		var isTerminal bool
 		err := func() error {
 			// The worker is responsible for ensuring the sync method sees the appropriate
@@ -1279,7 +1280,7 @@ func (p *podWorkers) podWorkerLoop(podUID types.UID, podUpdates <-chan struct{})
 				//  container's status is garbage collected before we have a chance to update the
 				//  API server (thus losing the exit code).
 				status, err = p.podCache.GetNewerThan(update.Options.Pod.UID, lastSyncTime)
-
+				klog.InfoS(">>>>> (feat/pause): p.podCache.GetNewerThan", "status", status)
 				if err != nil {
 					// This is the legacy event thrown by manage pod loop all other events are now dispatched
 					// from syncPodFn
@@ -1315,7 +1316,8 @@ func (p *podWorkers) podWorkerLoop(podUID types.UID, podUpdates <-chan struct{})
 			return err
 		}()
 
-		pausePod := podutil.ShouldPausePod(update.Options.Pod)
+		shouldPause := podutil.ShouldPausePod(update.Options.Pod)
+		isPaused := p.IsPodPaused(podUID)
 		var phaseTransition bool
 		switch {
 		case err == context.Canceled:
@@ -1325,12 +1327,6 @@ func (p *podWorkers) podWorkerLoop(podUID types.UID, podUpdates <-chan struct{})
 		case err != nil:
 			// we will queue a retry
 			klog.ErrorS(err, "Error syncing pod, skipping", "pod", podRef, "podUID", podUID)
-
-		case pausePod:
-			// TODO: fix log verbose level
-			klog.InfoS(">>>> (feat/pause-pod): Sync pod is done successfully, paused pod", "pod", podRef, "podUID", podUID, "updateType", update.WorkType)
-			p.completePaused(podUID)
-			phaseTransition = true
 
 		case update.WorkType == TerminatedPod:
 			// we can shut down the worker
@@ -1360,6 +1356,12 @@ func (p *podWorkers) podWorkerLoop(podUID types.UID, podUpdates <-chan struct{})
 			klog.V(4).InfoS("Pod is terminal", "pod", podRef, "podUID", podUID, "updateType", update.WorkType)
 			p.completeSync(podUID)
 			phaseTransition = true
+
+		case shouldPause && !isPaused:
+			p.completePaused(podUID)
+
+		case !shouldPause && isPaused:
+			p.completeResume(podUID)
 		}
 
 		// queue a retry if necessary, then put the next event in the channel if any
@@ -1367,7 +1369,8 @@ func (p *podWorkers) podWorkerLoop(podUID types.UID, podUpdates <-chan struct{})
 		if start := update.Options.StartTime; !start.IsZero() {
 			metrics.PodWorkerDuration.WithLabelValues(update.Options.UpdateType.String()).Observe(metrics.SinceInSeconds(start))
 		}
-		klog.V(4).InfoS("Processing pod event done", "pod", podRef, "podUID", podUID, "updateType", update.WorkType)
+		// TODO: set log level back to 4
+		klog.InfoS("Processing pod event done", "pod", podRef, "podUID", podUID, "updateType", update.WorkType)
 	}
 }
 
@@ -1458,9 +1461,6 @@ func (p *podWorkers) completePaused(podUID types.UID) {
 	p.podLock.Lock()
 	defer p.podLock.Unlock()
 
-	// TODO: fix log verbose level
-	klog.InfoS(">>>> (feat/pause-pod): Pod is paused", "podUID", podUID)
-
 	status, ok := p.podSyncStatuses[podUID]
 	if !ok {
 		return
@@ -1468,6 +1468,23 @@ func (p *podWorkers) completePaused(podUID types.UID) {
 
 	status.pausedAt = p.clock.Now()
 	status.paused = true
+	// TODO: fix log verbose level
+	klog.InfoS(">>>> (feat/pause-pod): Pod is marked paused", "podUID", podUID)
+}
+
+func (p *podWorkers) completeResume(podUID types.UID) {
+	p.podLock.Lock()
+	defer p.podLock.Unlock()
+
+	status, ok := p.podSyncStatuses[podUID]
+	if !ok {
+		return
+	}
+
+	status.pausedAt = time.Time{}
+	status.paused = false
+	// TODO: fix log verbose level
+	klog.InfoS(">>>> (feat/pause-pod): Pod is marked unpaused", "podUID", podUID)
 }
 
 // completeTerminatingRuntimePod is invoked when syncTerminatingPod completes successfully,

@@ -1692,9 +1692,10 @@ func (kl *Kubelet) SyncPod(ctx context.Context, updateType kubetypes.SyncPodType
 		attribute.String("k8s.pod.update_type", updateType.String()),
 		attribute.String("k8s.namespace.name", pod.Namespace),
 	))
-	klog.V(4).InfoS("SyncPod enter", "pod", klog.KObj(pod), "podUID", pod.UID)
+	// TODO: chanage log level to 4
+	klog.InfoS("SyncPod enter", "pod", klog.KObj(pod), "podUID", pod.UID)
 	defer func() {
-		klog.V(4).InfoS("SyncPod exit", "pod", klog.KObj(pod), "podUID", pod.UID, "isTerminal", isTerminal)
+		klog.InfoS("SyncPod exit", "pod", klog.KObj(pod), "podUID", pod.UID, "isTerminal", isTerminal)
 		otelSpan.End()
 	}()
 
@@ -1721,6 +1722,8 @@ func (kl *Kubelet) SyncPod(ctx context.Context, updateType kubetypes.SyncPodType
 
 	// Generate final API pod status with pod and status manager status
 	apiPodStatus := kl.generateAPIPodStatus(pod, podStatus, false)
+	// TODO: remove debug log
+	klog.InfoS(">>>> (feat/pause-pod): kl.generateAPIPodStatus", "pod", pod.Name, "status", apiPodStatus.Phase)
 	// The pod IP may be changed in generateAPIPodStatus if the pod is using host network. (See #24576)
 	// TODO(random-liu): After writing pod spec into container labels, check whether pod is using host network, and
 	// set pod IP to hostIP directly in runtime.GetPodStatus
@@ -1743,7 +1746,9 @@ func (kl *Kubelet) SyncPod(ctx context.Context, updateType kubetypes.SyncPodType
 	// as termination (we want to stop the pod, but potentially restart it later if soft admission allows
 	// it later). Set the status and phase appropriately
 	runnable := kl.canRunPod(pod)
-	if !runnable.Admit {
+	// TODO: remove debug log
+	klog.InfoS(">>>> (feat/pause): is pod runnable?", "pod", pod.Name, "runnable", runnable)
+	if !runnable.Admit && !podutil.ShouldPausePod(pod) {
 		// Pod is not runnable; and update the Pod and Container statuses to why.
 		if apiPodStatus.Phase != v1.PodFailed && apiPodStatus.Phase != v1.PodSucceeded {
 			apiPodStatus.Phase = v1.PodPending
@@ -1772,11 +1777,13 @@ func (kl *Kubelet) SyncPod(ctx context.Context, updateType kubetypes.SyncPodType
 		metrics.PodStartDuration.Observe(metrics.SinceInSeconds(firstSeenTime))
 	}
 
+	klog.InfoS(">>>> (feat/pause-pod): setting pod status", "pod", pod.Name, "status", apiPodStatus.Phase)
 	kl.statusManager.SetPodStatus(pod, apiPodStatus)
 
 	// Pods that are not runnable must be stopped - return a typed error to the pod worker
 	if !runnable.Admit {
-		klog.V(2).InfoS("Pod is not runnable and must have running containers stopped", "pod", klog.KObj(pod), "podUID", pod.UID, "message", runnable.Message)
+		// TODO: change log level back to 2
+		klog.InfoS("Pod is not runnable and must have running containers stopped", "pod", klog.KObj(pod), "podUID", pod.UID, "message", runnable.Message)
 		var syncErr error
 		p := kubecontainer.ConvertPodStatusToRunningPod(kl.getRuntime().Type(), podStatus)
 		if err := kl.killPod(ctx, pod, p, nil); err != nil {
@@ -2284,7 +2291,12 @@ func (kl *Kubelet) canRunPod(pod *v1.Pod) lifecycle.PodAdmitResult {
 	attrs := &lifecycle.PodAdmitAttributes{Pod: pod}
 	// Get "OtherPods". Rejected pods are failed, so only include admitted pods that are alive.
 	attrs.OtherPods = kl.GetActivePods()
-
+	// TODO: remove debug log
+	var activePods []string
+	for _, pod := range attrs.OtherPods {
+		activePods = append(activePods, pod.Name)
+	}
+	klog.InfoS(">>>> (feat/pause-pod): can run pod?", "active_pods", activePods)
 	for _, handler := range kl.softAdmitHandlers {
 		if result := handler.Admit(attrs); !result.Admit {
 			return result
