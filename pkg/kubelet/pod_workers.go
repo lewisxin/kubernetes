@@ -882,11 +882,6 @@ func (p *podWorkers) UpdatePod(options UpdatePodOptions) {
 			klog.V(4).InfoS("Pod is in a terminal phase (success/failed), begin teardown", "pod", klog.KRef(ns, name), "podUID", uid, "updateType", options.UpdateType)
 			status.terminatingAt = now
 			becameTerminating = true
-		case pod.Status.Phase == v1.PodPaused:
-			// TODO: fix log verbose level
-			klog.InfoS(">>>> (feat/pause-pod) Pod is currently paused, begin teardown", "pod", klog.KRef(ns, name), "podUID", uid, "updateType", options.UpdateType)
-			status.terminatingAt = now
-			becameTerminating = true
 		case options.UpdateType == kubetypes.SyncPodKill:
 			if options.KillPodOptions != nil && options.KillPodOptions.Evict {
 				klog.V(4).InfoS("Pod is being evicted by the kubelet, begin teardown", "pod", klog.KRef(ns, name), "podUID", uid, "updateType", options.UpdateType)
@@ -1316,7 +1311,7 @@ func (p *podWorkers) podWorkerLoop(podUID types.UID, podUpdates <-chan struct{})
 			return err
 		}()
 
-		shouldPause := podutil.ShouldPausePod(update.Options.Pod)
+		shouldPause := podutil.IsMarkedToPausePod(update.Options.Pod)
 		isPaused := p.IsPodPaused(podUID)
 		var phaseTransition bool
 		switch {

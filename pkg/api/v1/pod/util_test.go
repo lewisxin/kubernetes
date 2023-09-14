@@ -1017,10 +1017,10 @@ func TestIsContainersReadyConditionTrue(t *testing.T) {
 	}
 }
 
-func TestShouldPausePod(t *testing.T) {
+func TestIsMarkedToPausePod(t *testing.T) {
 	for desc, test := range map[string]struct {
-		input          *v1.Pod
-		shouldBePaused bool
+		input         *v1.Pod
+		markedToPause bool
 	}{
 		"unrecognized key - should return false": {
 			input: &v1.Pod{
@@ -1029,7 +1029,7 @@ func TestShouldPausePod(t *testing.T) {
 					Annotations: map[string]string{"random-key": "true"},
 				},
 			},
-			shouldBePaused: false,
+			markedToPause: false,
 		},
 		"empty annotations - should return false": {
 			input: &v1.Pod{
@@ -1037,7 +1037,7 @@ func TestShouldPausePod(t *testing.T) {
 					Name: "pod2",
 				},
 			},
-			shouldBePaused: false,
+			markedToPause: false,
 		},
 		"marked as false - should return false": {
 			input: &v1.Pod{
@@ -1046,7 +1046,7 @@ func TestShouldPausePod(t *testing.T) {
 					Annotations: map[string]string{AnnotationKeyPausePod: "false"},
 				},
 			},
-			shouldBePaused: false,
+			markedToPause: false,
 		},
 		"marked as true - should return false": {
 			input: &v1.Pod{
@@ -1055,11 +1055,11 @@ func TestShouldPausePod(t *testing.T) {
 					Annotations: map[string]string{AnnotationKeyPausePod: "true"},
 				},
 			},
-			shouldBePaused: true,
+			markedToPause: true,
 		},
 	} {
 		t.Run(desc, func(t *testing.T) {
-			require.Equal(t, test.shouldBePaused, ShouldPausePod((test.input)))
+			require.Equal(t, test.markedToPause, IsMarkedToPausePod((test.input)))
 		})
 	}
 }

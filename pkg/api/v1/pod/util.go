@@ -400,7 +400,7 @@ const (
 	AnnotationKeyPausePod = "rt-preemptive.scheduling.x-k8s.io/pause-pod"
 )
 
-func ShouldPausePod(pod *v1.Pod) bool {
+func IsMarkedToPausePod(pod *v1.Pod) bool {
 	pause, ok := pod.Annotations[AnnotationKeyPausePod]
 	if !ok {
 		return false

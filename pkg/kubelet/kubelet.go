@@ -1748,7 +1748,7 @@ func (kl *Kubelet) SyncPod(ctx context.Context, updateType kubetypes.SyncPodType
 	runnable := kl.canRunPod(pod)
 	// TODO: remove debug log
 	klog.InfoS(">>>> (feat/pause): is pod runnable?", "pod", pod.Name, "runnable", runnable)
-	if !runnable.Admit && !podutil.ShouldPausePod(pod) {
+	if !runnable.Admit && !podutil.IsMarkedToPausePod(pod) {
 		// Pod is not runnable; and update the Pod and Container statuses to why.
 		if apiPodStatus.Phase != v1.PodFailed && apiPodStatus.Phase != v1.PodSucceeded {
 			apiPodStatus.Phase = v1.PodPending
@@ -2439,7 +2439,11 @@ func (kl *Kubelet) syncLoopIteration(ctx context.Context, configCh <-chan kubety
 		}
 
 		if e.Type == pleg.ContainerDied {
+			// TODO: remove debug log
 			if containerID, ok := e.Data.(string); ok {
+				if pod, ok := kl.podManager.GetPodByUID(e.ID); ok {
+					klog.InfoS("debug: e.Type == pleg.ContainerDied", "pod", klog.KObj(pod), "containerID", containerID)
+				}
 				kl.cleanUpContainersInPod(e.ID, containerID)
 			}
 		}
@@ -2683,6 +2687,8 @@ func (kl *Kubelet) HandlePodReconcile(pods []*v1.Pod) {
 		// been evicted, so if this is about minimizing the time to react to an eviction we
 		// can do better. If it's about preserving pod status info we can also do better.
 		if eviction.PodIsEvicted(pod.Status) {
+			// TODO: remove debug log
+			klog.InfoS("debug: eviction.PodIsEvicted(pod.Status)", "pod", klog.KObj(pod))
 			if podStatus, err := kl.podCache.Get(pod.UID); err == nil {
 				kl.containerDeletor.deleteContainersInPod("", podStatus, true)
 			}
