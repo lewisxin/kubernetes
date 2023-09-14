@@ -1590,8 +1590,8 @@ func getPhase(pod *v1.Pod, info []v1.ContainerStatus, podIsTerminal bool) v1.Pod
 		klog.V(5).InfoS("Pod waiting > 0, pending")
 		// One or more containers has not been started
 		return v1.PodPending
-	case paused > 0 && running == 0 && unknown == 0:
-		// All containers have been started, and all are paused
+	case paused == len(spec.Containers):
+		// All containers are paused
 		return v1.PodPaused
 	case running > 0 && unknown == 0:
 		// All containers have been started, and at least
@@ -1670,13 +1670,17 @@ func (kl *Kubelet) generateAPIPodStatus(pod *v1.Pod, podStatus *kubecontainer.Po
 		oldPodStatus = pod.Status
 	}
 	s := kl.convertStatusToAPIStatus(pod, podStatus, oldPodStatus)
+	// TODO: remove debug log
+	klog.InfoS("convertStatusToAPIStatus", "pod", klog.KObj(pod), "statuses", s.ContainerStatuses)
+
 	if utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScaling) {
 		s.Resize = kl.determinePodResizeStatus(pod, s)
 	}
 	// calculate the next phase and preserve reason
 	allStatus := append(append([]v1.ContainerStatus{}, s.ContainerStatuses...), s.InitContainerStatuses...)
 	s.Phase = getPhase(pod, allStatus, podIsTerminal)
-	klog.V(4).InfoS("Got phase for pod", "pod", klog.KObj(pod), "oldPhase", oldPodStatus.Phase, "phase", s.Phase)
+	// TODO: set log level back to 4
+	klog.InfoS("Got phase for pod", "pod", klog.KObj(pod), "oldPhase", oldPodStatus.Phase, "phase", s.Phase)
 
 	// Perform a three-way merge between the statuses from the status manager,
 	// runtime, and generated status to ensure terminal status is correctly set.
@@ -1899,6 +1903,8 @@ func (kl *Kubelet) convertToAPIContainerStatuses(pod *v1.Pod, podStatus *kubecon
 		switch {
 		case cs.State == kubecontainer.ContainerStateRunning:
 			status.State.Running = &v1.ContainerStateRunning{StartedAt: metav1.NewTime(cs.StartedAt)}
+		case cs.State == kubecontainer.ContainerStatePaused:
+			status.State.Paused = &v1.ContainerStatePaused{PausedAt: metav1.NewTime(cs.PasuedAt)}
 		case cs.State == kubecontainer.ContainerStateCreated:
 			// containers that are created but not running are "waiting to be running"
 			status.State.Waiting = &v1.ContainerStateWaiting{}
@@ -2076,12 +2082,12 @@ func (kl *Kubelet) convertToAPIContainerStatuses(pod *v1.Pod, podStatus *kubecon
 			// if the old container status was terminated, the lasttermination status is correct
 			continue
 		}
-		if oldStatus.State.Running == nil {
+		if oldStatus.State.Running == nil || oldStatus.State.Paused == nil {
 			// if the old container status isn't running, then waiting is an appropriate status and we have nothing to do
 			continue
 		}
 
-		// If we're here, we know the pod was previously running, but doesn't have a terminated status. We will check now to
+		// If we're here, we know the pod was previously running or paused, but doesn't have a terminated status. We will check now to
 		// see if it's in a pending state.
 		status := statuses[container.Name]
 		// If the status we're about to write indicates the default, the Waiting status will force this pod back into Pending.

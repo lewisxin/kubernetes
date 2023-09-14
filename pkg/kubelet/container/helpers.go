@@ -71,6 +71,8 @@ type RuntimeHelper interface {
 // ShouldContainerBeRestarted checks whether a container needs to be restarted.
 // TODO(yifan): Think about how to refactor this.
 func ShouldContainerBeRestarted(container *v1.Container, pod *v1.Pod, podStatus *PodStatus) bool {
+	// TODO: remove log
+	klog.InfoS("ShouldContainerBeRestarted?", "pod", pod.Name, "container", container.Name)
 	// Once a pod has been marked deleted, it should not be restarted
 	if pod.DeletionTimestamp != nil {
 		return false
@@ -82,8 +84,9 @@ func ShouldContainerBeRestarted(container *v1.Container, pod *v1.Pod, podStatus 
 	if status == nil {
 		return true
 	}
+	klog.InfoS("ShouldContainerBeRestarted? container state", "state", status.State, "container", container.Name)
 	// Check whether container is running
-	if status.State == ContainerStateRunning {
+	if status.State == ContainerStateRunning || status.State == ContainerStatePaused {
 		return false
 	}
 	// Always restart container in the unknown, or in the created state.

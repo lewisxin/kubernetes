@@ -87,6 +87,7 @@ type plegContainerState string
 
 const (
 	plegContainerRunning     plegContainerState = "running"
+	plegContainerPaused      plegContainerState = "paused"
 	plegContainerExited      plegContainerState = "exited"
 	plegContainerUnknown     plegContainerState = "unknown"
 	plegContainerNonExistent plegContainerState = "non-existent"
@@ -99,6 +100,8 @@ func convertState(state kubecontainer.State) plegContainerState {
 		return plegContainerUnknown
 	case kubecontainer.ContainerStateRunning:
 		return plegContainerRunning
+	case kubecontainer.ContainerStatePaused:
+		return plegContainerPaused
 	case kubecontainer.ContainerStateExited:
 		return plegContainerExited
 	case kubecontainer.ContainerStateUnknown:
@@ -185,6 +188,8 @@ func generateEvents(podID types.UID, cid string, oldState, newState plegContaine
 	switch newState {
 	case plegContainerRunning:
 		return []*PodLifecycleEvent{{ID: podID, Type: ContainerStarted, Data: cid}}
+	case plegContainerPaused:
+		return []*PodLifecycleEvent{{ID: podID, Type: ContainerPaused, Data: cid}}
 	case plegContainerExited:
 		return []*PodLifecycleEvent{{ID: podID, Type: ContainerDied, Data: cid}}
 	case plegContainerUnknown:

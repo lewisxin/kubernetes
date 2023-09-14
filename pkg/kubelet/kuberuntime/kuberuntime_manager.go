@@ -525,8 +525,8 @@ type podActions struct {
 }
 
 func (p podActions) String() string {
-	return fmt.Sprintf("KillPod: %t, CreateSandbox: %t, UpdatePodResources: %t, Attempt: %d, InitContainersToStart: %v, ContainersToStart: %v, EphemeralContainersToStart: %v,ContainersToUpdate: %v, ContainersToKill: %v",
-		p.KillPod, p.CreateSandbox, p.UpdatePodResources, p.Attempt, p.InitContainersToStart, p.ContainersToStart, p.EphemeralContainersToStart, p.ContainersToUpdate, p.ContainersToKill)
+	return fmt.Sprintf("KillPod: %t, PausePod: %t, CreateSandbox: %t, UpdatePodResources: %t, Attempt: %d, InitContainersToStart: %v, ContainersToStart: %v, ContainersToPause: %v, ContainersToResume: %v, EphemeralContainersToStart: %v,ContainersToUpdate: %v, ContainersToKill: %v",
+		p.KillPod, p.PausePod, p.CreateSandbox, p.UpdatePodResources, p.Attempt, p.InitContainersToStart, p.ContainersToStart, p.ContainersToPause, p.ContainersToResume, p.EphemeralContainersToStart, p.ContainersToUpdate, p.ContainersToKill)
 }
 
 func containerChanged(container *v1.Container, containerStatus *kubecontainer.Status) (uint64, uint64, bool) {
@@ -832,36 +832,34 @@ func (m *kubeGenericRuntimeManager) updatePodContainerResources(pod *v1.Pod, res
 
 // computePodActions checks whether the pod spec has changed and returns the changes if true.
 func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *v1.Pod, podStatus *kubecontainer.PodStatus) podActions {
-	klog.V(5).InfoS("Syncing Pod", "pod", klog.KObj(pod))
-
-	// TODO: add feature gate
+	// TODO: set log level back to 5
+	klog.InfoS("Syncing Pod", "pod", klog.KObj(pod))
 	pausePod := podutil.ShouldPausePod(pod)
-	var containersToPause []int
-	var containersToResume []int
-
-	for idx, c := range pod.Spec.Containers {
-		paused := containerPaused(&c, podStatus)
-		if pausePod && !paused {
-			containersToPause = append(containersToPause, idx)
-		} else if !pausePod && paused {
-			containersToResume = append(containersToResume, idx)
-		} else if pausePod && paused {
-			// TODO: change log verbose level to 2
-			klog.InfoS(">>>> (feat/pause-pod): attempt to pause already paused conatiners", "container", c.Name)
-		}
-	}
-
 	createPodSandbox, attempt, sandboxID := runtimeutil.PodSandboxChanged(pod, podStatus)
 	changes := podActions{
 		KillPod:            createPodSandbox,
-		PausePod:           pausePod,
+		PausePod:           pausePod && !createPodSandbox,
 		CreateSandbox:      createPodSandbox,
 		SandboxID:          sandboxID,
 		Attempt:            attempt,
 		ContainersToStart:  []int{},
-		ContainersToPause:  containersToPause,
-		ContainersToResume: containersToResume,
+		ContainersToPause:  []int{},
+		ContainersToResume: []int{},
 		ContainersToKill:   make(map[kubecontainer.ContainerID]containerToKillInfo),
+	}
+
+	// TODO: add feature gate
+	for idx, c := range pod.Spec.Containers {
+		paused := containerPaused(&c, podStatus)
+		klog.InfoS(">>>> (feat/pause-pod): containerPaused?", "paused", paused, "container", c.Name)
+		if changes.PausePod && !paused {
+			changes.ContainersToPause = append(changes.ContainersToPause, idx)
+		} else if !changes.PausePod && paused {
+			changes.ContainersToResume = append(changes.ContainersToResume, idx)
+		} else if changes.PausePod && paused {
+			// TODO: change log verbose level to 2
+			klog.InfoS(">>>> (feat/pause-pod): attempt to pause already paused conatiners", "container", c.Name)
+		}
 	}
 
 	// If we need to (re-)create the pod sandbox, everything will need to be
@@ -940,11 +938,16 @@ func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *
 	// check the status of containers.
 	for idx, container := range pod.Spec.Containers {
 		containerStatus := podStatus.FindContainerStatusByName(container.Name)
-
+		// TODO: remove debug log
+		if containerStatus != nil {
+			klog.InfoS("FindContainerStatusByName", "status", containerStatus, "container", container.Name)
+		}
 		// Call internal container post-stop lifecycle hook for any non-running container so that any
 		// allocated cpus are released immediately. If the container is restarted, cpus will be re-allocated
 		// to it.
-		if containerStatus != nil && containerStatus.State != kubecontainer.ContainerStateRunning {
+		if containerStatus != nil &&
+			containerStatus.State != kubecontainer.ContainerStateRunning &&
+			containerStatus.State != kubecontainer.ContainerStatePaused {
 			if err := m.internalLifecycle.PostStopContainer(containerStatus.ID.ID); err != nil {
 				klog.ErrorS(err, "Internal container post-stop lifecycle hook failed for container in pod with error",
 					"containerName", container.Name, "pod", klog.KObj(pod))
@@ -955,7 +958,8 @@ func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *
 		// need to restart it.
 		if containerStatus == nil || containerStatus.State != kubecontainer.ContainerStateRunning {
 			if kubecontainer.ShouldContainerBeRestarted(&container, pod, podStatus) {
-				klog.V(3).InfoS("Container of pod is not in the desired state and shall be started", "containerName", container.Name, "pod", klog.KObj(pod))
+				// TODO: set log level back to 3
+				klog.InfoS("Container of pod is not in the desired state and shall be started", "containerName", container.Name, "pod", klog.KObj(pod))
 				changes.ContainersToStart = append(changes.ContainersToStart, idx)
 				if containerStatus != nil && containerStatus.State == kubecontainer.ContainerStateUnknown {
 					// If container is in unknown state, we don't know whether it
@@ -1015,7 +1019,8 @@ func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *
 			message:   message,
 			reason:    reason,
 		}
-		klog.V(2).InfoS("Message for Container of pod", "containerName", container.Name, "containerStatusID", containerStatus.ID, "pod", klog.KObj(pod), "containerMessage", message)
+		// TODO: change log level back to 2
+		klog.InfoS("Message for Container of pod", "containerName", container.Name, "containerStatusID", containerStatus.ID, "pod", klog.KObj(pod), "containerMessage", message)
 	}
 
 	if keepCount == 0 && len(changes.ContainersToStart) == 0 {
@@ -1041,7 +1046,8 @@ func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *
 func (m *kubeGenericRuntimeManager) SyncPod(ctx context.Context, pod *v1.Pod, podStatus *kubecontainer.PodStatus, pullSecrets []v1.Secret, backOff *flowcontrol.Backoff) (result kubecontainer.PodSyncResult) {
 	// Step 1: Compute sandbox and container changes.
 	podContainerChanges := m.computePodActions(ctx, pod, podStatus)
-	klog.V(3).InfoS("computePodActions got for pod", "podActions", podContainerChanges, "pod", klog.KObj(pod))
+	// TODO: set log level back to 3
+	klog.InfoS("computePodActions got for pod", "podActions", podContainerChanges, "pod", klog.KObj(pod))
 
 	// TODO: protect with feature gate
 	if podContainerChanges.PausePod {
@@ -1050,9 +1056,12 @@ func (m *kubeGenericRuntimeManager) SyncPod(ctx context.Context, pod *v1.Pod, po
 		for _, idx := range podContainerChanges.ContainersToPause {
 			container := pod.Spec.Containers[idx]
 			containerStatus := podStatus.FindContainerStatusByName(container.Name)
+			if containerStatus == nil {
+				continue
+			}
 			containerID := containerStatus.ID.ID
 			// TODO: remove debug log
-			klog.InfoS(">>>> (feat/pause-pod): Pausing containers", "container", container.Name, "containerID", containerID)
+			klog.InfoS(">>>> (feat/pause-pod): Pausing containers", "container", container.Name, "containerID", containerID, "status", containerStatus.State)
 			msg, err := m.pauseContainer(ctx, pod, &container, containerID)
 			if err != nil {
 				klog.ErrorS(err, "pauseContainer failed", "message", msg)
@@ -1067,9 +1076,12 @@ func (m *kubeGenericRuntimeManager) SyncPod(ctx context.Context, pod *v1.Pod, po
 		for _, idx := range podContainerChanges.ContainersToResume {
 			container := pod.Spec.Containers[idx]
 			containerStatus := podStatus.FindContainerStatusByName(container.Name)
+			if containerStatus == nil {
+				continue
+			}
 			containerID := containerStatus.ID.ID
 			// TODO: remove debug log
-			klog.InfoS(">>>> (feat/pause-pod): Resuming containers", "container", container.Name, "containerID", containerID)
+			klog.InfoS(">>>> (feat/pause-pod): Resuming containers", "container", container.Name, "containerID", containerID, "status", containerStatus.State)
 			msg, err := m.resumeContainer(ctx, pod, &container, containerID)
 			if err != nil {
 				klog.ErrorS(err, "resumeContainer failed", "message", msg)

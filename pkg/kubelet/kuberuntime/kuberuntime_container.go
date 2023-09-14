@@ -635,6 +635,9 @@ func toKubeContainerStatus(status *runtimeapi.ContainerStatus, runtimeName strin
 		// started the container. Set the StartedAt time.
 		cStatus.StartedAt = time.Unix(0, status.StartedAt)
 	}
+	if status.State == runtimeapi.ContainerState_CONTAINER_PAUSED {
+		cStatus.PasuedAt = time.Unix(0, status.PausedAt)
+	}
 	if status.State == runtimeapi.ContainerState_CONTAINER_EXITED {
 		cStatus.Reason = status.Reason
 		cStatus.Message = status.Message
@@ -926,7 +929,8 @@ func (m *kubeGenericRuntimeManager) computeInitContainerActions(pod *v1.Pod, pod
 	for i := len(pod.Spec.InitContainers) - 1; i >= 0; i-- {
 		container := &pod.Spec.InitContainers[i]
 		status := podStatus.FindContainerStatusByName(container.Name)
-		klog.V(4).InfoS("Computing init container action", "pod", klog.KObj(pod), "container", container.Name, "status", status)
+		// TODO: set log level back to 4
+		klog.InfoS("Computing init container action", "pod", klog.KObj(pod), "container", container.Name, "status", status)
 		if status == nil {
 			// If the container is previously initialized but its status is not
 			// found, it means its last status is removed for some reason.
@@ -1035,6 +1039,8 @@ func (m *kubeGenericRuntimeManager) computeInitContainerActions(pod *v1.Pod, pod
 
 		default: // kubecontainer.ContainerStatusUnknown or other unknown states
 			if types.IsRestartableInitContainer(container) {
+				// TODO: remove log
+				klog.InfoS("kubecontainer.ContainerStatusUnknown or other unknown states", "pod", klog.KObj(pod), "containerStatus", status)
 				// If the restartable init container is in unknown state, restart it.
 				changes.ContainersToKill[status.ID] = containerToKillInfo{
 					name:      container.Name,
@@ -1045,6 +1051,7 @@ func (m *kubeGenericRuntimeManager) computeInitContainerActions(pod *v1.Pod, pod
 				}
 				changes.InitContainersToStart = append(changes.InitContainersToStart, i)
 			} else { // init container
+				klog.InfoS("init container is in unknown state", "pod", klog.KObj(pod), "containerStatus", status)
 				if !isInitContainerFailed(status) {
 					klog.V(4).InfoS("This should not happen, init container is in unknown state but not failed", "pod", klog.KObj(pod), "containerStatus", status)
 				}

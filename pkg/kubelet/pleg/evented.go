@@ -286,6 +286,9 @@ func (e *EventedPLEG) processCRIEvent(event *runtimeapi.ContainerEventResponse) 
 	case runtimeapi.ContainerEventType_CONTAINER_STARTED_EVENT:
 		e.sendPodLifecycleEvent(&PodLifecycleEvent{ID: types.UID(event.PodSandboxStatus.Metadata.Uid), Type: ContainerStarted, Data: event.ContainerId})
 		klog.V(4).InfoS("Received Container Started Event", "event", event.String())
+	case runtimeapi.ContainerEventType_CONTAINER_PAUSED_EVENT:
+		e.sendPodLifecycleEvent(&PodLifecycleEvent{ID: types.UID(event.PodSandboxStatus.Metadata.Uid), Type: ContainerPaused, Data: event.ContainerId})
+		klog.V(4).InfoS("Received Container Paused Event", "event", event.String())
 	case runtimeapi.ContainerEventType_CONTAINER_DELETED_EVENT:
 		// In case the pod is deleted it is safe to generate both ContainerDied and ContainerRemoved events, just like in the case of
 		// Generic PLEG. https://github.com/kubernetes/kubernetes/blob/24753aa8a4df8d10bfd6330e0f29186000c018be/pkg/kubelet/pleg/generic.go#L169

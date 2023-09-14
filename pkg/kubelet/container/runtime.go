@@ -340,6 +340,8 @@ type Status struct {
 	CreatedAt time.Time
 	// Start time of the container.
 	StartedAt time.Time
+	// Paused time of the container.
+	PasuedAt time.Time
 	// Finish time of the container.
 	FinishedAt time.Time
 	// Exit code of the container.
