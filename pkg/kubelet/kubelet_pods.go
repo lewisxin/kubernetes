@@ -1356,7 +1356,7 @@ func (kl *Kubelet) validateContainerLogStatus(podName string, podStatus *v1.PodS
 		return kubecontainer.ContainerID{}, fmt.Errorf("container %q in pod %q is not available", containerName, podName)
 	}
 	lastState := cStatus.LastTerminationState
-	waiting, running, terminated := cStatus.State.Waiting, cStatus.State.Running, cStatus.State.Terminated
+	waiting, running, paused, terminated := cStatus.State.Waiting, cStatus.State.Running, cStatus.State.Paused, cStatus.State.Terminated
 
 	switch {
 	case previous:
@@ -1365,7 +1365,7 @@ func (kl *Kubelet) validateContainerLogStatus(podName string, podStatus *v1.PodS
 		}
 		cID = lastState.Terminated.ContainerID
 
-	case running != nil:
+	case running != nil, paused != nil:
 		cID = cStatus.ContainerID
 
 	case terminated != nil:
