@@ -36,6 +36,10 @@ type ContainerManager interface {
 	CreateContainer(ctx context.Context, podSandboxID string, config *runtimeapi.ContainerConfig, sandboxConfig *runtimeapi.PodSandboxConfig) (string, error)
 	// StartContainer starts the container.
 	StartContainer(ctx context.Context, containerID string) error
+	// PauseContainer pauses the container execution.
+	PauseContainer(ctx context.Context, containerID string) error
+	// ResumeContainer resumes the container execution.
+	ResumeContainer(ctx context.Context, containerID string) error
 	// StopContainer stops a running container with a grace period (i.e., timeout).
 	StopContainer(ctx context.Context, containerID string, timeout int64) error
 	// RemoveContainer removes the container.

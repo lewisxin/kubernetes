@@ -62,6 +62,8 @@ func toKubeContainerState(state runtimeapi.ContainerState) kubecontainer.State {
 		return kubecontainer.ContainerStateCreated
 	case runtimeapi.ContainerState_CONTAINER_RUNNING:
 		return kubecontainer.ContainerStateRunning
+	case runtimeapi.ContainerState_CONTAINER_PAUSED:
+		return kubecontainer.ContainerStatePaused
 	case runtimeapi.ContainerState_CONTAINER_EXITED:
 		return kubecontainer.ContainerStateExited
 	case runtimeapi.ContainerState_CONTAINER_UNKNOWN:

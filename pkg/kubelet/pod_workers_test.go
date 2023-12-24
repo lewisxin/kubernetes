@@ -59,6 +59,7 @@ type fakePodWorkers struct {
 	finished              map[types.UID]bool
 	removeRuntime         map[types.UID]bool
 	removeContent         map[types.UID]bool
+	paused                map[types.UID]bool
 	terminatingStaticPods map[string]bool
 }
 
@@ -140,6 +141,11 @@ func (f *fakePodWorkers) IsPodForMirrorPodTerminatingByFullName(podFullname stri
 	f.statusLock.Lock()
 	defer f.statusLock.Unlock()
 	return f.terminatingStaticPods[podFullname]
+}
+func (f *fakePodWorkers) IsPodPaused(uid types.UID) bool {
+	f.statusLock.Lock()
+	defer f.statusLock.Unlock()
+	return f.paused[uid]
 }
 
 type TestingInterface interface {

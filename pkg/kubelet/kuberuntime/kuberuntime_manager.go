@@ -488,6 +488,8 @@ type podActions struct {
 	// Whether need to create a new sandbox. If needed to kill pod and create
 	// a new pod sandbox, all init containers need to be purged (i.e., removed).
 	CreateSandbox bool
+	// whether to pause pod
+	PausePod bool
 	// The id of existing sandbox. It is used for starting containers in ContainersToStart.
 	SandboxID string
 	// The attempt number of creating sandboxes for the pod.
@@ -505,6 +507,14 @@ type podActions struct {
 	// where the index is the index of the specific container in the pod spec (
 	// pod.Spec.Containers).
 	ContainersToStart []int
+	// ContainersToPause keeps a list of indexes for the containers to pause,
+	// where the index is the index of the specific container in the pod spec (
+	// pod.Spec.Containers).
+	ContainersToPause []int
+	// ContainersToResume keeps a list of indexes for the containers to resume,
+	// where the index is the index of the specific container in the pod spec (
+	// pod.Spec.Containers).
+	ContainersToResume []int
 	// ContainersToKill keeps a map of containers that need to be killed, note that
 	// the key is the container ID of the container, while
 	// the value contains necessary information to kill a container.
@@ -520,8 +530,8 @@ type podActions struct {
 }
 
 func (p podActions) String() string {
-	return fmt.Sprintf("KillPod: %t, CreateSandbox: %t, UpdatePodResources: %t, Attempt: %d, InitContainersToStart: %v, ContainersToStart: %v, EphemeralContainersToStart: %v,ContainersToUpdate: %v, ContainersToKill: %v",
-		p.KillPod, p.CreateSandbox, p.UpdatePodResources, p.Attempt, p.InitContainersToStart, p.ContainersToStart, p.EphemeralContainersToStart, p.ContainersToUpdate, p.ContainersToKill)
+	return fmt.Sprintf("KillPod: %t, PausePod: %t, CreateSandbox: %t, UpdatePodResources: %t, Attempt: %d, InitContainersToStart: %v, ContainersToStart: %v, ContainersToPause: %v, ContainersToResume: %v, EphemeralContainersToStart: %v,ContainersToUpdate: %v, ContainersToKill: %v",
+		p.KillPod, p.PausePod, p.CreateSandbox, p.UpdatePodResources, p.Attempt, p.InitContainersToStart, p.ContainersToStart, p.ContainersToPause, p.ContainersToResume, p.EphemeralContainersToStart, p.ContainersToUpdate, p.ContainersToKill)
 }
 
 func containerChanged(container *v1.Container, containerStatus *kubecontainer.Status) (uint64, uint64, bool) {
@@ -539,6 +549,11 @@ func containerSucceeded(c *v1.Container, podStatus *kubecontainer.PodStatus) boo
 		return false
 	}
 	return cStatus.ExitCode == 0
+}
+
+func containerPaused(c *v1.Container, podStatus *kubecontainer.PodStatus) bool {
+	cStatus := podStatus.FindContainerStatusByName(c.Name)
+	return cStatus != nil && cStatus.State == kubecontainer.ContainerStatePaused
 }
 
 func isInPlacePodVerticalScalingAllowed(pod *v1.Pod) bool {
@@ -822,18 +837,46 @@ func (m *kubeGenericRuntimeManager) updatePodContainerResources(pod *v1.Pod, res
 
 // computePodActions checks whether the pod spec has changed and returns the changes if true.
 func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *v1.Pod, podStatus *kubecontainer.PodStatus) podActions {
-	klog.V(5).InfoS("Syncing Pod", "pod", klog.KObj(pod))
-
+	// TODO: set log level back to 5
+	klog.InfoS("Syncing Pod", "pod", klog.KObj(pod))
 	createPodSandbox, attempt, sandboxID := runtimeutil.PodSandboxChanged(pod, podStatus)
 	changes := podActions{
-		KillPod:           createPodSandbox,
-		CreateSandbox:     createPodSandbox,
-		SandboxID:         sandboxID,
-		Attempt:           attempt,
-		ContainersToStart: []int{},
-		ContainersToKill:  make(map[kubecontainer.ContainerID]containerToKillInfo),
+		KillPod:            createPodSandbox,
+		CreateSandbox:      createPodSandbox,
+		SandboxID:          sandboxID,
+		Attempt:            attempt,
+		ContainersToStart:  []int{},
+		ContainersToPause:  []int{},
+		ContainersToResume: []int{},
+		ContainersToKill:   make(map[kubecontainer.ContainerID]containerToKillInfo),
 	}
 
+	// TODO remove debug log
+	klog.InfoS("debug: computePodActions section 1", "changes", changes)
+
+	// TODO: add feature gate
+	markedToPause := podutil.IsMarkedToPausePod(pod)
+	pausedCount := 0
+	for idx, c := range pod.Spec.Containers {
+		paused := containerPaused(&c, podStatus)
+		if paused {
+			pausedCount++
+		}
+		klog.InfoS(">>>> (feat/pause-pod): containerPaused?", "paused", paused, "container", c.Name)
+		if markedToPause && !createPodSandbox && !paused {
+			changes.ContainersToPause = append(changes.ContainersToPause, idx)
+		} else if !markedToPause && paused {
+			changes.ContainersToResume = append(changes.ContainersToResume, idx)
+		} else if markedToPause && paused {
+			// TODO: change log verbose level to 2
+			klog.InfoS(">>>> (feat/pause-pod): attempt to pause already paused conatiners", "container", c.Name)
+		}
+	}
+	changes.PausePod = len(changes.ContainersToPause) > 0
+	podPaused := pausedCount == len(pod.Spec.Containers)
+
+	// TODO remove debug log
+	klog.InfoS("debug: computePodActions section 2", "changes", changes)
 	// If we need to (re-)create the pod sandbox, everything will need to be
 	// killed and recreated, and init containers should be purged.
 	if createPodSandbox {
@@ -893,6 +936,9 @@ func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *
 		return changes
 	}
 
+	// TODO remove debug log
+	klog.InfoS("debug: computePodActions section 3", "changes", changes)
+
 	// Ephemeral containers may be started even if initialization is not yet complete.
 	for i := range pod.Spec.EphemeralContainers {
 		c := (*v1.Container)(&pod.Spec.EphemeralContainers[i].EphemeralContainerCommon)
@@ -946,16 +992,23 @@ func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *
 		}
 	}
 
+	// TODO remove debug log
+	klog.InfoS("debug: computePodActions section 5", "changes", changes)
 	// Number of running containers to keep.
 	keepCount := 0
 	// check the status of containers.
 	for idx, container := range pod.Spec.Containers {
 		containerStatus := podStatus.FindContainerStatusByName(container.Name)
-
+		// TODO: remove debug log
+		if containerStatus != nil {
+			klog.InfoS("FindContainerStatusByName", "status", containerStatus, "container", container.Name)
+		}
 		// Call internal container post-stop lifecycle hook for any non-running container so that any
 		// allocated cpus are released immediately. If the container is restarted, cpus will be re-allocated
 		// to it.
-		if containerStatus != nil && containerStatus.State != kubecontainer.ContainerStateRunning {
+		if containerStatus != nil &&
+			containerStatus.State != kubecontainer.ContainerStateRunning &&
+			containerStatus.State != kubecontainer.ContainerStatePaused {
 			if err := m.internalLifecycle.PostStopContainer(containerStatus.ID.ID); err != nil {
 				klog.ErrorS(err, "Internal container post-stop lifecycle hook failed for container in pod with error",
 					"containerName", container.Name, "pod", klog.KObj(pod))
@@ -966,7 +1019,8 @@ func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *
 		// need to restart it.
 		if containerStatus == nil || containerStatus.State != kubecontainer.ContainerStateRunning {
 			if kubecontainer.ShouldContainerBeRestarted(&container, pod, podStatus) {
-				klog.V(3).InfoS("Container of pod is not in the desired state and shall be started", "containerName", container.Name, "pod", klog.KObj(pod))
+				// TODO: set log level back to 3
+				klog.InfoS("Container of pod is not in the desired state and shall be started", "containerName", container.Name, "pod", klog.KObj(pod))
 				changes.ContainersToStart = append(changes.ContainersToStart, idx)
 				if containerStatus != nil && containerStatus.State == kubecontainer.ContainerStateUnknown {
 					// If container is in unknown state, we don't know whether it
@@ -1026,10 +1080,13 @@ func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *
 			message:   message,
 			reason:    reason,
 		}
-		klog.V(2).InfoS("Message for Container of pod", "containerName", container.Name, "containerStatusID", containerStatus.ID, "pod", klog.KObj(pod), "containerMessage", message)
+		// TODO: change log level back to 2
+		klog.InfoS("Message for Container of pod", "containerName", container.Name, "containerStatusID", containerStatus.ID, "pod", klog.KObj(pod), "containerMessage", message)
 	}
 
-	if keepCount == 0 && len(changes.ContainersToStart) == 0 {
+	// TODO remove debug log
+	klog.InfoS("debug: computePodActions section 6", "changes", changes)
+	if keepCount == 0 && len(changes.ContainersToStart) == 0 && !podPaused {
 		changes.KillPod = true
 		if utilfeature.DefaultFeatureGate.Enabled(features.SidecarContainers) {
 			// To prevent the restartable init containers to keep pod alive, we should
@@ -1054,7 +1111,52 @@ func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *
 func (m *kubeGenericRuntimeManager) SyncPod(ctx context.Context, pod *v1.Pod, podStatus *kubecontainer.PodStatus, pullSecrets []v1.Secret, backOff *flowcontrol.Backoff) (result kubecontainer.PodSyncResult) {
 	// Step 1: Compute sandbox and container changes.
 	podContainerChanges := m.computePodActions(ctx, pod, podStatus)
-	klog.V(3).InfoS("computePodActions got for pod", "podActions", podContainerChanges, "pod", klog.KObj(pod))
+	// TODO: set log level back to 3
+	klog.InfoS("computePodActions got for pod", "podActions", podContainerChanges, "pod", klog.KObj(pod))
+
+	// TODO: protect with feature gate
+	if podContainerChanges.PausePod {
+		// TODO: remove debug log
+		klog.InfoS(">>>> (feat/pause-pod): Pausing containers for pod")
+		for _, idx := range podContainerChanges.ContainersToPause {
+			container := pod.Spec.Containers[idx]
+			containerStatus := podStatus.FindContainerStatusByName(container.Name)
+			if containerStatus == nil {
+				continue
+			}
+			containerID := containerStatus.ID.ID
+			// TODO: remove debug log
+			klog.InfoS(">>>> (feat/pause-pod): Pausing containers", "container", container.Name, "containerID", containerID, "status", containerStatus.State)
+			msg, err := m.pauseContainer(ctx, pod, &container, containerID)
+			if err != nil {
+				klog.ErrorS(err, "pauseContainer failed", "message", msg)
+			} else {
+				pauseContainerResult := kubecontainer.NewSyncResult(kubecontainer.PauseContainer, container.Name)
+				result.AddSyncResult(pauseContainerResult)
+			}
+		}
+	} else if len(podContainerChanges.ContainersToResume) > 0 {
+		// TODO: remove debug log
+		klog.InfoS(">>>> (feat/pause-pod): Resuming containers for paused pod: to be implemented")
+		for _, idx := range podContainerChanges.ContainersToResume {
+			container := pod.Spec.Containers[idx]
+			containerStatus := podStatus.FindContainerStatusByName(container.Name)
+			if containerStatus == nil {
+				continue
+			}
+			containerID := containerStatus.ID.ID
+			// TODO: remove debug log
+			klog.InfoS(">>>> (feat/pause-pod): Resuming containers", "container", container.Name, "containerID", containerID, "status", containerStatus.State)
+			msg, err := m.resumeContainer(ctx, pod, &container, containerID)
+			if err != nil {
+				klog.ErrorS(err, "resumeContainer failed", "message", msg)
+			} else {
+				resumeContainerResult := kubecontainer.NewSyncResult(kubecontainer.ResumeContainer, container.Name)
+				result.AddSyncResult(resumeContainerResult)
+			}
+		}
+	}
+
 	if podContainerChanges.CreateSandbox {
 		ref, err := ref.GetReference(legacyscheme.Scheme, pod)
 		if err != nil {

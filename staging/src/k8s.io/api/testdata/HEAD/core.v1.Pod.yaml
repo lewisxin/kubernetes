@@ -1164,6 +1164,8 @@ status:
     image: imageValue
     imageID: imageIDValue
     lastState:
+      paused:
+        pausedAt: "2001-01-01T01:01:01Z"
       running:
         startedAt: "2001-01-01T01:01:01Z"
       terminated:
@@ -1189,6 +1191,8 @@ status:
     restartCount: 5
     started: true
     state:
+      paused:
+        pausedAt: "2001-01-01T01:01:01Z"
       running:
         startedAt: "2001-01-01T01:01:01Z"
       terminated:
@@ -1209,6 +1213,8 @@ status:
     image: imageValue
     imageID: imageIDValue
     lastState:
+      paused:
+        pausedAt: "2001-01-01T01:01:01Z"
       running:
         startedAt: "2001-01-01T01:01:01Z"
       terminated:
@@ -1234,6 +1240,8 @@ status:
     restartCount: 5
     started: true
     state:
+      paused:
+        pausedAt: "2001-01-01T01:01:01Z"
       running:
         startedAt: "2001-01-01T01:01:01Z"
       terminated:
@@ -1257,6 +1265,8 @@ status:
     image: imageValue
     imageID: imageIDValue
     lastState:
+      paused:
+        pausedAt: "2001-01-01T01:01:01Z"
       running:
         startedAt: "2001-01-01T01:01:01Z"
       terminated:
@@ -1282,6 +1292,8 @@ status:
     restartCount: 5
     started: true
     state:
+      paused:
+        pausedAt: "2001-01-01T01:01:01Z"
       running:
         startedAt: "2001-01-01T01:01:01Z"
       terminated:

@@ -24,6 +24,7 @@ type ContainerStateApplyConfiguration struct {
 	Waiting    *ContainerStateWaitingApplyConfiguration    `json:"waiting,omitempty"`
 	Running    *ContainerStateRunningApplyConfiguration    `json:"running,omitempty"`
 	Terminated *ContainerStateTerminatedApplyConfiguration `json:"terminated,omitempty"`
+	Paused     *ContainerStatePausedApplyConfiguration     `json:"paused,omitempty"`
 }
 
 // ContainerStateApplyConfiguration constructs an declarative configuration of the ContainerState type for use with
@@ -53,5 +54,13 @@ func (b *ContainerStateApplyConfiguration) WithRunning(value *ContainerStateRunn
 // If called multiple times, the Terminated field is set to the value of the last call.
 func (b *ContainerStateApplyConfiguration) WithTerminated(value *ContainerStateTerminatedApplyConfiguration) *ContainerStateApplyConfiguration {
 	b.Terminated = value
+	return b
+}
+
+// WithPaused sets the Paused field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Paused field is set to the value of the last call.
+func (b *ContainerStateApplyConfiguration) WithPaused(value *ContainerStatePausedApplyConfiguration) *ContainerStateApplyConfiguration {
+	b.Paused = value
 	return b
 }

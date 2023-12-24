@@ -38,6 +38,8 @@ type RelistDuration struct {
 const (
 	// ContainerStarted - event type when the new state of container is running.
 	ContainerStarted PodLifeCycleEventType = "ContainerStarted"
+	// ContainerPaused - event type when the new state of container is paused.
+	ContainerPaused PodLifeCycleEventType = "ContainerPaused"
 	// ContainerDied - event type when the new state of container is exited.
 	ContainerDied PodLifeCycleEventType = "ContainerDied"
 	// ContainerRemoved - event type when the old state of container is exited.

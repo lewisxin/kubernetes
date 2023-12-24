@@ -37,6 +37,10 @@ var (
 var (
 	// ErrRunContainer returned when runtime failed to start any of pod's container.
 	ErrRunContainer = errors.New("RunContainerError")
+	// ErrPauseContainer returned when runtime failed to pause any of pod's container.
+	ErrPauseContainer = errors.New("PauseContainerError")
+	// ErrResumeContainer returned when runtime failed to resume any of pod's container.
+	ErrResumeContainer = errors.New("ResumeContainerError")
 	// ErrKillContainer returned when runtime failed to kill any of pod's containers.
 	ErrKillContainer = errors.New("KillContainerError")
 	// ErrCreatePodSandbox returned when runtime failed to create a sandbox for pod.
@@ -54,6 +58,10 @@ type SyncAction string
 const (
 	// StartContainer action
 	StartContainer SyncAction = "StartContainer"
+	// PauseContainer action
+	PauseContainer SyncAction = "PauseContainer"
+	// ResumeContainer action
+	ResumeContainer SyncAction = "ResumeContainer"
 	// KillContainer action
 	KillContainer SyncAction = "KillContainer"
 	// SetupNetwork action

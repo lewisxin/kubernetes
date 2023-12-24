@@ -197,7 +197,7 @@ func (cgc *containerGC) evictableContainers(ctx context.Context, minAge time.Dur
 	newestGCTime := time.Now().Add(-minAge)
 	for _, container := range containers {
 		// Prune out running containers.
-		if container.State == runtimeapi.ContainerState_CONTAINER_RUNNING {
+		if container.State == runtimeapi.ContainerState_CONTAINER_RUNNING || container.State == runtimeapi.ContainerState_CONTAINER_PAUSED {
 			continue
 		}
 

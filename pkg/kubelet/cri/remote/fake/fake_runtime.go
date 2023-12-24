@@ -161,6 +161,26 @@ func (f *RemoteRuntime) StartContainer(ctx context.Context, req *kubeapi.StartCo
 	return &kubeapi.StartContainerResponse{}, nil
 }
 
+// PauseContainer pauses the container.
+func (f *RemoteRuntime) PauseContainer(ctx context.Context, req *kubeapi.PauseContainerRequest) (*kubeapi.PauseContainerResponse, error) {
+	err := f.RuntimeService.PauseContainer(ctx, req.ContainerId)
+	if err != nil {
+		return nil, err
+	}
+
+	return &kubeapi.PauseContainerResponse{}, nil
+}
+
+// ResumeContainer resumes the container.
+func (f *RemoteRuntime) ResumeContainer(ctx context.Context, req *kubeapi.ResumeContainerRequest) (*kubeapi.ResumeContainerResponse, error) {
+	err := f.RuntimeService.ResumeContainer(ctx, req.ContainerId)
+	if err != nil {
+		return nil, err
+	}
+
+	return &kubeapi.ResumeContainerResponse{}, nil
+}
+
 // StopContainer stops a running container with a grace period (i.e., timeout).
 // This call is idempotent, and must not return an error if the container has
 // already been stopped.
