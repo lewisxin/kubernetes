@@ -335,7 +335,7 @@ func (in instrumentedImageManagerService) RemoveImage(ctx context.Context, image
 	return err
 }
 
-func (in instrumentedImageManagerService) ImageFsInfo(ctx context.Context) ([]*runtimeapi.FilesystemUsage, error) {
+func (in instrumentedImageManagerService) ImageFsInfo(ctx context.Context) (*runtimeapi.ImageFsInfoResponse, error) {
 	const operation = "image_fs_info"
 	defer recordOperation(operation, time.Now())
 

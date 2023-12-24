@@ -335,8 +335,8 @@ func RunningReady(p *v1.Pod) bool {
 }
 
 // WaitForPodsRunning waits for a given `timeout` to evaluate if a certain amount of pods in given `ns` are running.
-func WaitForPodsRunning(c clientset.Interface, ns string, num int, timeout time.Duration) error {
-	_, err := WaitForPods(context.TODO(), c, ns, metav1.ListOptions{}, Range{MinMatching: num, MaxMatching: num}, timeout,
+func WaitForPodsRunning(ctx context.Context, c clientset.Interface, ns string, num int, timeout time.Duration) error {
+	_, err := WaitForPods(ctx, c, ns, metav1.ListOptions{}, Range{MinMatching: num, MaxMatching: num}, timeout,
 		"be running and ready", func(pod *v1.Pod) bool {
 			ready, _ := testutils.PodRunningReady(pod)
 			return ready
@@ -345,8 +345,8 @@ func WaitForPodsRunning(c clientset.Interface, ns string, num int, timeout time.
 }
 
 // WaitForPodsSchedulingGated waits for a given `timeout` to evaluate if a certain amount of pods in given `ns` stay in scheduling gated state.
-func WaitForPodsSchedulingGated(c clientset.Interface, ns string, num int, timeout time.Duration) error {
-	_, err := WaitForPods(context.TODO(), c, ns, metav1.ListOptions{}, Range{MinMatching: num, MaxMatching: num}, timeout,
+func WaitForPodsSchedulingGated(ctx context.Context, c clientset.Interface, ns string, num int, timeout time.Duration) error {
+	_, err := WaitForPods(ctx, c, ns, metav1.ListOptions{}, Range{MinMatching: num, MaxMatching: num}, timeout,
 		"be in scheduling gated state", func(pod *v1.Pod) bool {
 			for _, condition := range pod.Status.Conditions {
 				if condition.Type == v1.PodScheduled && condition.Reason == v1.PodReasonSchedulingGated {
@@ -360,8 +360,8 @@ func WaitForPodsSchedulingGated(c clientset.Interface, ns string, num int, timeo
 
 // WaitForPodsWithSchedulingGates waits for a given `timeout` to evaluate if a certain amount of pods in given `ns`
 // match the given `schedulingGates`stay in scheduling gated state.
-func WaitForPodsWithSchedulingGates(c clientset.Interface, ns string, num int, timeout time.Duration, schedulingGates []v1.PodSchedulingGate) error {
-	_, err := WaitForPods(context.TODO(), c, ns, metav1.ListOptions{}, Range{MinMatching: num, MaxMatching: num}, timeout,
+func WaitForPodsWithSchedulingGates(ctx context.Context, c clientset.Interface, ns string, num int, timeout time.Duration, schedulingGates []v1.PodSchedulingGate) error {
+	_, err := WaitForPods(ctx, c, ns, metav1.ListOptions{}, Range{MinMatching: num, MaxMatching: num}, timeout,
 		"have certain scheduling gates", func(pod *v1.Pod) bool {
 			return reflect.DeepEqual(pod.Spec.SchedulingGates, schedulingGates)
 		})
@@ -581,10 +581,11 @@ func WaitForPodsResponding(ctx context.Context, c clientset.Interface, ns string
 
 			if err != nil {
 				// We may encounter errors here because of a race between the pod readiness and apiserver
-				// proxy. So, we log the error and retry if this occurs.
-				return nil, fmt.Errorf("Controller %s: failed to Get from replica pod %s:\n%s\nPod status:\n%s",
+				// proxy or because of temporary failures. The error gets wrapped for framework.HandleRetry.
+				// Gomega+Ginkgo will handle logging.
+				return nil, fmt.Errorf("controller %s: failed to Get from replica pod %s:\n%w\nPod status:\n%s",
 					controllerName, pod.Name,
-					format.Object(err, 1), format.Object(pod.Status, 1))
+					err, format.Object(pod.Status, 1))
 			}
 			responses = append(responses, response{podName: pod.Name, response: string(body)})
 		}

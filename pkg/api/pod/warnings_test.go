@@ -296,16 +296,16 @@ func TestWarnings(t *testing.T) {
 				}}},
 			}},
 			expected: []string{
-				`spec.initContainers[0].env[1]: hides previous definition of "a"`,
-				`spec.initContainers[0].env[2]: hides previous definition of "a"`,
-				`spec.initContainers[0].env[3]: hides previous definition of "a"`,
-				`spec.initContainers[0].env[4]: hides previous definition of "a"`,
-				`spec.initContainers[0].env[5]: hides previous definition of "a"`,
-				`spec.containers[0].env[1]: hides previous definition of "b"`,
-				`spec.containers[0].env[2]: hides previous definition of "b"`,
-				`spec.containers[0].env[3]: hides previous definition of "b"`,
-				`spec.containers[0].env[4]: hides previous definition of "b"`,
-				`spec.containers[0].env[5]: hides previous definition of "b"`,
+				`spec.initContainers[0].env[1]: hides previous definition of "a", which may be dropped when using apply`,
+				`spec.initContainers[0].env[2]: hides previous definition of "a", which may be dropped when using apply`,
+				`spec.initContainers[0].env[3]: hides previous definition of "a", which may be dropped when using apply`,
+				`spec.initContainers[0].env[4]: hides previous definition of "a", which may be dropped when using apply`,
+				`spec.initContainers[0].env[5]: hides previous definition of "a", which may be dropped when using apply`,
+				`spec.containers[0].env[1]: hides previous definition of "b", which may be dropped when using apply`,
+				`spec.containers[0].env[2]: hides previous definition of "b", which may be dropped when using apply`,
+				`spec.containers[0].env[3]: hides previous definition of "b", which may be dropped when using apply`,
+				`spec.containers[0].env[4]: hides previous definition of "b", which may be dropped when using apply`,
+				`spec.containers[0].env[5]: hides previous definition of "b", which may be dropped when using apply`,
 			},
 		},
 		{
@@ -504,7 +504,7 @@ func TestWarnings(t *testing.T) {
 				Spec: api.PodSpec{Volumes: []api.Volume{
 					{Name: "ephemeral-volume", VolumeSource: api.VolumeSource{Ephemeral: &api.EphemeralVolumeSource{
 						VolumeClaimTemplate: &api.PersistentVolumeClaimTemplate{
-							Spec: api.PersistentVolumeClaimSpec{Resources: api.ResourceRequirements{
+							Spec: api.PersistentVolumeClaimSpec{Resources: api.VolumeResourceRequirements{
 								Requests: api.ResourceList{api.ResourceStorage: resource.MustParse("200Mi")}}},
 						},
 					}}}}},
@@ -518,7 +518,7 @@ func TestWarnings(t *testing.T) {
 				Spec: api.PodSpec{Volumes: []api.Volume{
 					{Name: "ephemeral-volume", VolumeSource: api.VolumeSource{Ephemeral: &api.EphemeralVolumeSource{
 						VolumeClaimTemplate: &api.PersistentVolumeClaimTemplate{
-							Spec: api.PersistentVolumeClaimSpec{Resources: api.ResourceRequirements{
+							Spec: api.PersistentVolumeClaimSpec{Resources: api.VolumeResourceRequirements{
 								Requests: api.ResourceList{api.ResourceStorage: resource.MustParse("200m")}}},
 						},
 					}}}}},

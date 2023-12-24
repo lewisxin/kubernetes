@@ -92,8 +92,8 @@ func (sched *Scheduler) updateNodeInCache(oldObj, newObj interface{}) {
 
 	nodeInfo := sched.Cache.UpdateNode(logger, oldNode, newNode)
 	// Only requeue unschedulable pods if the node became more schedulable.
-	if event := nodeSchedulingPropertiesChange(newNode, oldNode); event != nil {
-		sched.SchedulingQueue.MoveAllToActiveOrBackoffQueue(logger, *event, oldNode, newNode, preCheckForNode(nodeInfo))
+	for _, evt := range nodeSchedulingPropertiesChange(newNode, oldNode) {
+		sched.SchedulingQueue.MoveAllToActiveOrBackoffQueue(logger, evt, oldNode, newNode, preCheckForNode(nodeInfo))
 	}
 }
 
@@ -447,8 +447,8 @@ func addAllEventHandlers(
 				); err != nil {
 					return err
 				}
+				handlers = append(handlers, handlerRegistration)
 			}
-			handlers = append(handlers, handlerRegistration)
 		case framework.ResourceClaim:
 			if utilfeature.DefaultFeatureGate.Enabled(features.DynamicResourceAllocation) {
 				if handlerRegistration, err = informerFactory.Resource().V1alpha2().ResourceClaims().Informer().AddEventHandler(
@@ -456,8 +456,17 @@ func addAllEventHandlers(
 				); err != nil {
 					return err
 				}
+				handlers = append(handlers, handlerRegistration)
 			}
-			handlers = append(handlers, handlerRegistration)
+		case framework.ResourceClass:
+			if utilfeature.DefaultFeatureGate.Enabled(features.DynamicResourceAllocation) {
+				if handlerRegistration, err = informerFactory.Resource().V1alpha2().ResourceClasses().Informer().AddEventHandler(
+					buildEvtResHandler(at, framework.ResourceClass, "ResourceClass"),
+				); err != nil {
+					return err
+				}
+				handlers = append(handlers, handlerRegistration)
+			}
 		case framework.StorageClass:
 			if at&framework.Add != 0 {
 				if handlerRegistration, err = informerFactory.Storage().V1().StorageClasses().Informer().AddEventHandler(
@@ -513,24 +522,26 @@ func addAllEventHandlers(
 	return nil
 }
 
-func nodeSchedulingPropertiesChange(newNode *v1.Node, oldNode *v1.Node) *framework.ClusterEvent {
+func nodeSchedulingPropertiesChange(newNode *v1.Node, oldNode *v1.Node) []framework.ClusterEvent {
+	var events []framework.ClusterEvent
+
 	if nodeSpecUnschedulableChanged(newNode, oldNode) {
-		return &queue.NodeSpecUnschedulableChange
+		events = append(events, queue.NodeSpecUnschedulableChange)
 	}
 	if nodeAllocatableChanged(newNode, oldNode) {
-		return &queue.NodeAllocatableChange
+		events = append(events, queue.NodeAllocatableChange)
 	}
 	if nodeLabelsChanged(newNode, oldNode) {
-		return &queue.NodeLabelChange
+		events = append(events, queue.NodeLabelChange)
 	}
 	if nodeTaintsChanged(newNode, oldNode) {
-		return &queue.NodeTaintChange
+		events = append(events, queue.NodeTaintChange)
 	}
 	if nodeConditionsChanged(newNode, oldNode) {
-		return &queue.NodeConditionChange
+		events = append(events, queue.NodeConditionChange)
 	}
 
-	return nil
+	return events
 }
 
 func nodeAllocatableChanged(newNode *v1.Node, oldNode *v1.Node) bool {
